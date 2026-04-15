@@ -6,817 +6,181 @@
 <title>Team Timeclock</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
-
-  :root {
-    --bg: #F7F6F3;
-    --surface: #FFFFFF;
-    --border: #E4E2DC;
-    --text: #1A1916;
-    --muted: #8A8880;
-    --accent: #2D6A4F;
-    --accent-light: #E8F5EE;
-    --accent-text: #1B4332;
-    --danger: #C0392B;
-    --danger-light: #FDECEA;
-    --warn: #B7791F;
-    --warn-light: #FEF3CD;
-    --radius: 12px;
-    --radius-sm: 8px;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 2rem 1rem;
-  }
-
-  .container { width: 100%; max-width: 440px; }
-
-  .logo {
-    text-align: center;
-    margin-bottom: 2rem;
-  }
-  .logo h1 {
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: -0.5px;
-  }
-  .logo .sub {
-    font-size: 13px;
-    color: var(--muted);
-    margin-top: 2px;
-    font-family: 'DM Mono', monospace;
-    font-weight: 400;
-  }
-
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    margin-bottom: 12px;
-  }
-
-  .card-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 1rem;
-  }
-
-  input[type=text], input[type=password], input[type=email] {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 15px;
-    background: var(--bg);
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  input:focus { border-color: var(--accent); }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 20px;
-    border-radius: var(--radius-sm);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    transition: all 0.15s;
-    white-space: nowrap;
-  }
-  .btn:hover { background: var(--bg); }
-  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn-primary:hover { background: var(--accent-text); border-color: var(--accent-text); }
-  .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-  .btn-danger:hover { opacity: 0.88; }
-  .btn-full { width: 100%; padding: 13px; font-size: 15px; }
-  .btn-sm { padding: 6px 12px; font-size: 13px; }
-  .btn-ghost { border-color: transparent; background: transparent; color: var(--muted); }
-  .btn-ghost:hover { color: var(--text); background: var(--bg); }
-
-  .badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 9px;
-    border-radius: 20px;
-    letter-spacing: 0.02em;
-  }
-  .badge-in { background: var(--accent-light); color: var(--accent-text); }
-  .badge-lunch { background: var(--warn-light); color: var(--warn); }
-  .badge-out { background: #F1EFE8; color: #888780; }
-
-  .agent-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: opacity 0.12s;
-  }
-  .agent-row:last-child { border-bottom: none; }
-  .agent-row:hover { opacity: 0.75; }
-
-  .avatar {
-    width: 38px; height: 38px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600;
-    flex-shrink: 0;
-  }
-
-  .pinpad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    max-width: 240px;
-    margin: 0 auto;
-  }
-  .pinkey {
-    height: 56px;
-    font-size: 20px;
-    font-family: 'DM Mono', monospace;
-    font-weight: 500;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    cursor: pointer;
-    transition: background 0.1s, transform 0.08s;
-  }
-  .pinkey:hover { background: var(--bg); }
-  .pinkey:active { transform: scale(0.94); }
-
-  .pin-dots {
-    display: flex; gap: 12px; justify-content: center;
-    margin: 1.25rem 0;
-  }
-  .pin-dot {
-    width: 11px; height: 11px;
-    border-radius: 50%;
-    border: 1.5px solid var(--border);
-    transition: all 0.15s;
-  }
-  .pin-dot.filled { background: var(--text); border-color: var(--text); }
-
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 1.25rem;
-  }
-  .stat {
-    background: var(--bg);
-    border-radius: var(--radius-sm);
-    padding: 12px;
-    text-align: center;
-  }
-  .stat-val { font-size: 22px; font-weight: 600; }
-  .stat-label { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
-
-  .err { color: var(--danger); font-size: 13px; text-align: center; min-height: 18px; margin-top: 8px; }
-
-  .time-display {
-    font-family: 'DM Mono', monospace;
-    font-size: 36px;
-    font-weight: 500;
-    text-align: center;
-    letter-spacing: -1px;
-    margin: 0.5rem 0;
-  }
-  .date-display {
-    font-size: 13px;
-    color: var(--muted);
-    text-align: center;
-    margin-bottom: 1.5rem;
-  }
-
-  .action-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 1rem;
-  }
-
-  .punch-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 13px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    color: var(--muted);
-  }
-  .punch-row:last-child { border-bottom: none; }
-  .punch-row span:last-child { color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; }
-
-  .week-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
-  .week-row:last-child { border-bottom: none; }
-
-  .spinner {
-    width: 20px; height: 20px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    margin: 2rem auto;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .notice {
-    font-size: 13px;
-    color: var(--muted);
-    text-align: center;
-    padding: 1rem;
-  }
-
-  .setup-box {
-    background: var(--accent-light);
-    border: 1px solid #B7DEC9;
-    border-radius: var(--radius-sm);
-    padding: 1rem;
-    font-size: 13px;
-    color: var(--accent-text);
-    margin-bottom: 1rem;
-    line-height: 1.6;
-  }
-  .setup-box code {
-    font-family: 'DM Mono', monospace;
-    background: rgba(0,0,0,0.07);
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-size: 12px;
-  }
-
-  .tab-bar {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 1.25rem;
-    gap: 4px;
-  }
-  .tab {
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    border: none;
-    background: none;
-    color: var(--muted);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-family: 'DM Sans', sans-serif;
-  }
-  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  :root{--bg:#F7F6F3;--surface:#FFFFFF;--border:#E4E2DC;--text:#1A1916;--muted:#8A8880;--accent:#2D6A4F;--accent-light:#E8F5EE;--accent-text:#1B4332;--danger:#C0392B;--warn:#B7791F;--warn-light:#FEF3CD;--radius:12px;--radius-sm:8px;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;}
+  .container{width:100%;max-width:440px;}
+  .logo{text-align:center;margin-bottom:2rem;}
+  .logo h1{font-size:20px;font-weight:600;letter-spacing:-0.5px;}
+  .logo .sub{font-size:13px;color:var(--muted);margin-top:2px;font-family:'DM Mono',monospace;font-weight:400;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:12px;}
+  .card-title{font-size:13px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1rem;}
+  input[type=text],input[type=password]{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:15px;background:var(--bg);color:var(--text);outline:none;transition:border-color 0.15s;}
+  input:focus{border-color:var(--accent);}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);transition:all 0.15s;white-space:nowrap;}
+  .btn:hover{background:var(--bg);}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent-text);border-color:var(--accent-text);}
+  .btn-danger{background:#C0392B;border-color:#C0392B;color:#fff;}
+  .btn-danger:hover{opacity:0.88;}
+  .btn-full{width:100%;padding:13px;font-size:15px;}
+  .btn-sm{padding:6px 12px;font-size:13px;}
+  .btn-ghost{border-color:transparent;background:transparent;color:var(--muted);}
+  .btn-ghost:hover{color:var(--text);background:var(--bg);}
+  .badge{display:inline-block;font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;letter-spacing:0.02em;}
+  .badge-in{background:var(--accent-light);color:var(--accent-text);}
+  .badge-lunch{background:var(--warn-light);color:var(--warn);}
+  .badge-out{background:#F1EFE8;color:#888780;}
+  .agent-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity 0.12s;}
+  .agent-row:last-child{border-bottom:none;}
+  .agent-row:hover{opacity:0.75;}
+  .avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;}
+  .pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto;}
+  .pinkey{height:56px;font-size:20px;font-family:'DM Mono',monospace;font-weight:500;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);cursor:pointer;transition:background 0.1s,transform 0.08s;}
+  .pinkey:hover{background:var(--bg);}
+  .pinkey:active{transform:scale(0.94);}
+  .pin-dots{display:flex;gap:12px;justify-content:center;margin:1.25rem 0;}
+  .pin-dot{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--border);transition:all 0.15s;}
+  .pin-dot.filled{background:var(--text);border-color:var(--text);}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem;}
+  .stat{background:var(--bg);border-radius:var(--radius-sm);padding:12px;text-align:center;}
+  .stat-val{font-size:22px;font-weight:600;}
+  .stat-label{font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:0.05em;}
+  .err{color:#C0392B;font-size:13px;text-align:center;min-height:18px;margin-top:8px;}
+  .ok{color:#1D9E75;font-size:13px;text-align:center;min-height:18px;margin-top:8px;}
+  .time-display{font-family:'DM Mono',monospace;font-size:36px;font-weight:500;text-align:center;letter-spacing:-1px;margin:0.5rem 0;}
+  .punch-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);}
+  .punch-row:last-child{border-bottom:none;}
+  .punch-row span:last-child{color:var(--text);font-family:'DM Mono',monospace;font-size:12px;}
+  .week-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .week-row:last-child{border-bottom:none;}
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;margin:2rem auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .notice{font-size:13px;color:var(--muted);text-align:center;padding:1rem;}
+  .tab-bar{display:flex;border-bottom:1px solid var(--border);margin-bottom:1.25rem;gap:4px;}
 </style>
 </head>
 <body>
-
 <div class="container">
-  <div class="logo">
-    <h1>Timeclock</h1>
-    <div class="sub" id="live-date"></div>
-  </div>
+  <div class="logo"><h1>Timeclock</h1><div class="sub" id="live-date"></div></div>
   <div id="app"></div>
 </div>
-
 <script>
-// ─── CONFIG ──────────────────────────────────────────────────────────────────
-// Replace these with your Supabase project URL and anon key
-const SUPABASE_URL = 'https://hdjujofjpyzkzzhwaegb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkanVqb2ZqcHl6a3p6aHdhZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzI5NTksImV4cCI6MjA5MTg0ODk1OX0.bVvDP_d9dALvlvVnbuACftXlp4UEiYt_peU4hudFNTc';
-const MANAGER_PIN  = '0000'; // Change this to your preferred manager PIN
+const SUPABASE_URL='https://hdjujofjpyzkzzhwaegb.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkanVqb2ZqcHl6a3p6aHdhZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzI5NTksImV4cCI6MjA5MTg0ODk1OX0.bVvDP_d9dALvlvVnbuACftXlp4UEiYt_peU4hudFNTc';
+const MANAGER_PIN='5050';
 
-// ─── SUPABASE HELPERS ────────────────────────────────────────────────────────
-async function db(method, table, body, params) {
-  const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
-  if (params) Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
-  const res = await fetch(url, {
-    method,
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal'
-    },
-    body: body ? JSON.stringify(body) : undefined
-  });
-  if (!res.ok) { const e = await res.json(); throw new Error(e.message || 'DB error'); }
-  try { return await res.json(); } catch { return null; }
-}
+async function db(method,table,body,params){const url=new URL(`${SUPABASE_URL}/rest/v1/${table}`);if(params)Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,v));const res=await fetch(url,{method,headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':method==='POST'?'return=representation':'return=minimal'},body:body?JSON.stringify(body):undefined});if(!res.ok){const e=await res.json();throw new Error(e.message||'DB error')}try{return await res.json()}catch{return null}}
+const getAgents=()=>db('GET','agents',null,{'select':'*','order':'name.asc'});
+const getPunches=id=>db('GET','punches',null,{'select':'*','agent_id':`eq.${id}`,'order':'punched_at.desc','limit':'50'});
+const getAllPunches=since=>db('GET','punches',null,{'select':'*,agents(name)','punched_at':`gte.${since}`,'order':'punched_at.asc'});
+const addPunch=(id,type)=>db('POST','punches',{agent_id:id,type,punched_at:new Date().toISOString()});
+const updatePin=(id,pin)=>db('PATCH','agents',{pin},{'id':`eq.${id}`});
 
-const getAgents  = () => db('GET','agents',null,{'select':'*','order':'name.asc'});
-const getPunches = (agentId) => db('GET','punches',null,{
-  'select':'*',
-  'agent_id': `eq.${agentId}`,
-  'order':'punched_at.desc',
-  'limit':'50'
-});
-const getAllPunches = (since) => db('GET','punches',null,{
-  'select':'*,agents(name)',
-  'punched_at': `gte.${since}`,
-  'order':'punched_at.asc'
-});
-const addPunch = (agentId, type) => db('POST','punches',{
-  agent_id: agentId,
-  type,
-  punched_at: new Date().toISOString()
-});
+let view='home',agents=[],selectedAgent=null,pinEntry='',pinErr='',mgrEntry='',mgrErr='',agentPunches=[],allPunches=[],loading=false,managerTab='team';
+let cpStep='current',cpCurrent='',cpNew='',cpEntry='',cpErr='',cpOk='';
+const COLORS=[{bg:'#E6F1FB',text:'#0C447C'},{bg:'#E1F5EE',text:'#085041'},{bg:'#EEEDFE',text:'#3C3489'},{bg:'#FAEEDA',text:'#633806'},{bg:'#FBEAF0',text:'#72243E'},{bg:'#FAECE7',text:'#712B13'}];
+const initials=n=>n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
+const colorFor=i=>COLORS[i%COLORS.length];
+const fmtTime=ts=>new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const fmtDate=ts=>new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+const fmtDur=ms=>{const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>0?`${h}h ${m}m`:`${m}m`};
+function weekStart(){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return d.toISOString()}
+function getAgentStatus(p){if(!p||!p.length)return'out';const l=p[0];if(l.type==='shift_in')return'shift_in';if(l.type==='lunch_out')return'lunch_out';if(l.type==='lunch_in')return'shift_in';return'out'}
+function statusLabel(s){if(s==='shift_in')return['In','badge-in'];if(s==='lunch_out')return['On lunch','badge-lunch'];return['Out','badge-out']}
+function getAvailableActions(s){if(s==='out')return[['shift_in','Clock in for shift','btn-primary']];if(s==='shift_in')return[['lunch_out','Start lunch break','btn-sm btn-ghost'],['shift_out','Clock out for day','btn-danger']];if(s==='lunch_out')return[['lunch_in','End lunch / back to work','btn-primary'],['shift_out','Clock out for day','btn-danger']];return[]}
+function dots(n,e){return Array.from({length:n},(_,i)=>`<div class="pin-dot${i<e.length?' filled':''}"></div>`).join('')}
+function numpad(attr){return[1,2,3,4,5,6,7,8,9,null,0,'⌫'].map(k=>k===null?`<button class="pinkey" style="visibility:hidden" disabled></button>`:`<button class="pinkey" ${attr}="${k}">${k}</button>`).join('')}
+function tabStyle(t){return`padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:${managerTab===t?'var(--text)':'var(--muted)'};border-bottom:2px solid ${managerTab===t?'var(--accent)':'transparent'};margin-bottom:-1px;font-family:inherit`}
 
-// ─── STATE ───────────────────────────────────────────────────────────────────
-let view = 'home';
-let agents = [];
-let selectedAgent = null;
-let pinEntry = '';
-let pinErr = '';
-let managerPinEntry = '';
-let managerPinErr = '';
-let agentPunches = [];
-let allPunches = [];
-let loading = false;
-let managerTab = 'team';
-
-const COLORS = [
-  {bg:'#E6F1FB',text:'#0C447C'},{bg:'#E1F5EE',text:'#085041'},
-  {bg:'#EEEDFE',text:'#3C3489'},{bg:'#FAEEDA',text:'#633806'},
-  {bg:'#FBEAF0',text:'#72243E'},{bg:'#FAECE7',text:'#712B13'}
-];
-
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const initials = n => n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
-const colorFor  = i => COLORS[i % COLORS.length];
-const fmtTime   = ts => new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-const fmtDate   = ts => new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
-const fmtDur    = ms => { const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000); return h>0?`${h}h ${m}m`:`${m}m`; };
-
-function weekStart() {
-  const d = new Date(); d.setHours(0,0,0,0);
-  d.setDate(d.getDate() - d.getDay()); // Sunday
-  return d.toISOString();
-}
-
-function getAgentStatus(punches) {
-  if (!punches || punches.length === 0) return 'out';
-  const last = punches[0];
-  if (last.type === 'shift_in')  return 'shift_in';
-  if (last.type === 'lunch_out') return 'lunch_out';
-  if (last.type === 'lunch_in')  return 'shift_in';
-  return 'out';
-}
-
-function statusLabel(status) {
-  if (status === 'shift_in')  return ['In', 'badge-in'];
-  if (status === 'lunch_out') return ['On lunch', 'badge-lunch'];
-  return ['Out', 'badge-out'];
-}
-
-// ─── CLOCK LOGIC ─────────────────────────────────────────────────────────────
-function getAvailableActions(status) {
-  if (status === 'out')       return [['shift_in','Clock in for shift','btn-primary']];
-  if (status === 'shift_in')  return [['lunch_out','Start lunch break','btn-sm btn-ghost'],['shift_out','Clock out for day','btn-danger']];
-  if (status === 'lunch_out') return [['lunch_in','End lunch / back to work','btn-primary'],['shift_out','Clock out for day','btn-danger']];
-  return [];
-}
-
-// ─── RENDER ──────────────────────────────────────────────────────────────────
-function render() {
-  const app = document.getElementById('app');
-  if (view === 'home')        app.innerHTML = renderHome();
-  else if (view === 'select') app.innerHTML = renderSelect();
-  else if (view === 'pin')    app.innerHTML = renderPin();
-  else if (view === 'agent')  app.innerHTML = renderAgent();
-  else if (view === 'mgr-pin')app.innerHTML = renderMgrPin();
-  else if (view === 'mgr')    app.innerHTML = renderMgr();
-  else if (view === 'setup')  app.innerHTML = renderSetup();
-  attachEvents();
+function render(){
+  document.getElementById('app').innerHTML=
+    view==='home'?renderHome():view==='select'?renderSelect():view==='pin'?renderPin():
+    view==='agent'?renderAgent():view==='change-pin'?renderChangePin():
+    view==='mgr-pin'?renderMgrPin():view==='mgr'?renderMgr():'';
   updateLiveTime();
 }
 
-function renderHome() {
-  const configured = SUPABASE_URL !== 'YOUR_SUPABASE_URL';
-  return `
-  ${!configured ? `<div class="setup-box">
-    <strong>Setup needed:</strong> Open <code>index.html</code>, find the CONFIG section at the top, and replace <code>https://hdjujofjpyzkzzhwaegb.supabase.co</code> and <code>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkanVqb2ZqcHl6a3p6aHdhZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzI5NTksImV4cCI6MjA5MTg0ODk1OX0.bVvDP_d9dALvlvVnbuACftXlp4UEiYt_peU4hudFNTc</code> with your Supabase credentials. <a href="#" data-action="go-setup" style="color:var(--accent);">View setup guide →</a>
-  </div>` : ''}
-  <div class="time-display" id="live-time"></div>
-  <div style="display:flex;flex-direction:column;gap:10px;margin-top:1rem;">
-    <button class="btn btn-primary btn-full" data-action="go-select">Clock in / out</button>
-    <button class="btn btn-full btn-ghost" data-action="go-mgr-pin">Manager view</button>
-  </div>`;
-}
+function renderHome(){return`<div class="time-display" id="live-time"></div><div style="display:flex;flex-direction:column;gap:10px;margin-top:1rem"><button class="btn btn-primary btn-full" id="btn-clockin">Clock in / out</button><button class="btn btn-full btn-ghost" id="btn-mgr">Manager view</button></div>`}
 
-function renderSelect() {
-  if (loading) return `<div class="spinner"></div>`;
-  const rows = agents.length === 0
-    ? `<p class="notice">No agents set up yet. Go to Manager view to add your team.</p>`
-    : agents.map((a,i) => {
-        const c = colorFor(i);
-        const status = getAgentStatus(a._punches);
-        const [label, cls] = statusLabel(status);
-        return `<div class="agent-row" data-action="select-agent" data-id="${a.id}">
-          <div class="avatar" style="background:${c.bg};color:${c.text}">${initials(a.name)}</div>
-          <div style="flex:1">
-            <div style="font-size:15px;font-weight:500">${a.name}</div>
-          </div>
-          <span class="badge ${cls}">${label}</span>
-        </div>`;
-      }).join('');
-  return `
-  <button class="btn btn-ghost btn-sm" data-action="go-home" style="margin-bottom:1rem">← Back</button>
-  <div class="card">
-    <div class="card-title">Select your name</div>
-    ${rows}
-  </div>`;
-}
+function renderSelect(){if(loading)return`<div class="spinner"></div>`;const rows=agents.length===0?`<p class="notice">No agents yet. Go to Manager view to add your team.</p>`:agents.map((a,i)=>{const c=colorFor(i);const[label,cls]=statusLabel(getAgentStatus(a._punches));return`<div class="agent-row" data-id="${a.id}"><div class="avatar" style="background:${c.bg};color:${c.text}">${initials(a.name)}</div><div style="flex:1"><div style="font-size:15px;font-weight:500">${a.name}</div></div><span class="badge ${cls}">${label}</span></div>`}).join('');return`<button class="btn btn-ghost btn-sm" id="btn-back">← Back</button><div class="card" style="margin-top:12px"><div class="card-title">Select your name</div>${rows}</div>`}
 
-function renderPin() {
-  const a = selectedAgent;
-  if (!a) return '';
-  const i = agents.findIndex(x=>x.id===a.id);
-  const c = colorFor(i);
-  const status = getAgentStatus(agentPunches);
-  const [label, cls] = statusLabel(status);
-  const dots = Array.from({length:4},(_,i)=>`<div class="pin-dot${i<pinEntry.length?' filled':''}"></div>`).join('');
-  return `
-  <button class="btn btn-ghost btn-sm" data-action="go-select" style="margin-bottom:1rem">← Back</button>
-  <div class="card" style="text-align:center">
-    <div class="avatar" style="background:${c.bg};color:${c.text};margin:0 auto 10px">${initials(a.name)}</div>
-    <div style="font-size:17px;font-weight:600">${a.name}</div>
-    <div style="margin-top:6px"><span class="badge ${cls}">${label}</span></div>
-    <div style="font-size:13px;color:var(--muted);margin-top:10px">Enter your PIN</div>
-    <div class="pin-dots">${dots}</div>
-    <div class="pinpad">
-      ${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map(k=>`<button class="pinkey" data-pin="${k}">${k}</button>`).join('')}
-    </div>
-    <div class="err">${pinErr}</div>
-  </div>`;
-}
+function renderPin(){const a=selectedAgent;const c=colorFor(agents.findIndex(x=>x.id===a.id));const[label,cls]=statusLabel(getAgentStatus(agentPunches));return`<button class="btn btn-ghost btn-sm" id="btn-back">← Back</button><div class="card" style="text-align:center;margin-top:12px"><div class="avatar" style="background:${c.bg};color:${c.text};margin:0 auto 10px">${initials(a.name)}</div><div style="font-size:17px;font-weight:600">${a.name}</div><div style="margin-top:6px"><span class="badge ${cls}">${label}</span></div><div style="font-size:13px;color:var(--muted);margin-top:10px">Enter your PIN</div><div class="pin-dots" id="pdots">${dots(4,pinEntry)}</div><div class="pinpad">${numpad('data-pin')}</div><div class="err" id="perr">${pinErr}</div></div>`}
 
-function renderAgent() {
-  const a = selectedAgent;
-  if (!a) return '';
-  const i = agents.findIndex(x=>x.id===a.id);
-  const c = colorFor(i);
-  const status = getAgentStatus(agentPunches);
-  const actions = getAvailableActions(status);
-  const [label, cls] = statusLabel(status);
+function renderAgent(){const a=selectedAgent;const c=colorFor(agents.findIndex(x=>x.id===a.id));const status=getAgentStatus(agentPunches);const[label,cls]=statusLabel(status);const today=agentPunches.filter(p=>{const d=new Date();d.setHours(0,0,0,0);return new Date(p.punched_at)>=d});const log=today.length===0?`<p class="notice" style="padding:0.5rem 0">No punches yet today</p>`:today.map(p=>{const L={shift_in:'Shift start',shift_out:'Shift end',lunch_out:'Lunch start',lunch_in:'Lunch end'};return`<div class="punch-row"><span>${L[p.type]||p.type}</span><span>${fmtTime(p.punched_at)}</span></div>`}).join('');const btns=getAvailableActions(status).map(([t,l,bc])=>`<button class="btn ${bc} btn-full" data-punch="${t}">${l}</button>`).join('');return`<div class="card" style="text-align:center"><div class="avatar" style="background:${c.bg};color:${c.text};margin:0 auto 10px;width:48px;height:48px;font-size:15px">${initials(a.name)}</div><div style="font-size:17px;font-weight:600">${a.name}</div><div style="margin-top:6px"><span class="badge ${cls}">${label}</span></div></div>${loading?`<div class="spinner"></div>`:`<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">${btns}</div>`}<div class="card"><div class="card-title">Today's punches</div>${log}</div><div style="display:flex;gap:8px;margin-top:4px"><button class="btn btn-ghost btn-sm" style="flex:1" id="btn-change-pin">Change PIN</button><button class="btn btn-ghost btn-sm" style="flex:1" id="btn-done">Done</button></div>`}
 
-  const todayPunches = agentPunches.filter(p => {
-    const d = new Date(); d.setHours(0,0,0,0);
-    return new Date(p.punched_at) >= d;
-  });
+function renderChangePin(){const a=selectedAgent;const c=colorFor(agents.findIndex(x=>x.id===a.id));const titles={current:['Current PIN','Enter your current PIN to verify','data-cpold'],new:['New PIN','Enter your new 4-digit PIN','data-cpnew'],confirm:['Confirm new PIN','Enter your new PIN again','data-cpconf']};const[title,subtitle,attr]=titles[cpStep];return`<button class="btn btn-ghost btn-sm" id="btn-back">← Back</button><div class="card" style="text-align:center;margin-top:12px"><div class="avatar" style="background:${c.bg};color:${c.text};margin:0 auto 10px">${initials(a.name)}</div><div style="font-size:17px;font-weight:600">${a.name}</div><div style="font-size:13px;font-weight:500;margin-top:12px">${title}</div><div style="font-size:13px;color:var(--muted);margin-top:4px">${subtitle}</div><div class="pin-dots" id="cpdots">${dots(4,cpEntry)}</div><div class="pinpad">${numpad(attr)}</div><div class="err" id="cperr">${cpErr}</div><div class="ok" id="cpok">${cpOk}</div></div>`}
 
-  const punchLog = todayPunches.length === 0
-    ? `<p class="notice" style="padding:0.5rem 0">No punches yet today</p>`
-    : todayPunches.map(p => {
-        const labels = {shift_in:'Shift start',shift_out:'Shift end',lunch_out:'Lunch start',lunch_in:'Lunch end'};
-        return `<div class="punch-row"><span>${labels[p.type]||p.type}</span><span>${fmtTime(p.punched_at)}</span></div>`;
-      }).join('');
+function renderMgrPin(){return`<button class="btn btn-ghost btn-sm" id="btn-back">← Back</button><div class="card" style="text-align:center;margin-top:12px"><div style="font-size:16px;font-weight:600;margin-bottom:4px">Manager PIN</div><div style="font-size:13px;color:var(--muted)">Enter your PIN</div><div class="pin-dots" id="mdots">${dots(4,mgrEntry)}</div><div class="pinpad">${numpad('data-mpin')}</div><div class="err" id="merr">${mgrErr}</div></div>`}
 
-  const actionBtns = actions.map(([type, label, cls]) =>
-    `<button class="btn ${cls} btn-full" data-action="punch" data-type="${type}">${label}</button>`
-  ).join('');
+function renderMgr(){const active=agents.filter(a=>getAgentStatus(a._punches)!=='out').length;const tabs=`<div class="tab-bar"><button class="btn-tab" data-tab="team" style="${tabStyle('team')}">Team</button><button class="btn-tab" data-tab="week" style="${tabStyle('week')}">This week</button><button class="btn-tab" data-tab="agents" style="${tabStyle('agents')}">Manage agents</button><button class="btn btn-ghost btn-sm" id="btn-exit" style="margin-left:auto">Exit</button></div>`;
+if(managerTab==='team'){const rows=agents.length===0?`<p class="notice">No agents yet.</p>`:agents.map((a,i)=>{const c=colorFor(i);const[label,cls]=statusLabel(getAgentStatus(a._punches));const lp=a._punches&&a._punches[0];return`<div class="week-row"><div class="avatar" style="background:${c.bg};color:${c.text}">${initials(a.name)}</div><div style="flex:1"><div style="font-weight:500">${a.name}</div>${lp?`<div style="font-size:12px;color:var(--muted)">${fmtDate(lp.punched_at)} · ${fmtTime(lp.punched_at)}</div>`:''}</div><span class="badge ${cls}">${label}</span></div>`}).join('');return`${tabs}<div class="stat-grid"><div class="stat"><div class="stat-val">${agents.length}</div><div class="stat-label">Agents</div></div><div class="stat"><div class="stat-val">${active}</div><div class="stat-label">Clocked in</div></div><div class="stat"><div class="stat-val">${agents.length-active}</div><div class="stat-label">Off</div></div></div><div class="card">${rows}</div>`}
+if(managerTab==='week'){if(loading)return`${tabs}<div class="spinner"></div>`;const grouped={};for(const a of agents)grouped[a.id]={name:a.name,punches:[]};for(const p of allPunches)if(grouped[p.agent_id])grouped[p.agent_id].punches.push(p);const rows=Object.values(grouped).map(g=>{if(!g.punches.length)return'';let sMs=0,lMs=0,sS=null,lS=null;for(const p of g.punches){if(p.type==='shift_in')sS=new Date(p.punched_at);if(p.type==='shift_out'&&sS){sMs+=new Date(p.punched_at)-sS;sS=null}if(p.type==='lunch_out')lS=new Date(p.punched_at);if(p.type==='lunch_in'&&lS){lMs+=new Date(p.punched_at)-lS;lS=null}}const wMs=sMs-lMs;const i=agents.findIndex(a=>a.name===g.name);const c=colorFor(i>=0?i:0);return`<div class="week-row"><div class="avatar" style="background:${c.bg};color:${c.text};flex-shrink:0">${initials(g.name)}</div><div style="flex:1"><div style="font-weight:500">${g.name}</div><div style="font-size:12px;color:var(--muted)">${g.punches.length} punches this week</div></div><div style="text-align:right;font-size:13px"><div style="font-weight:500">${fmtDur(wMs)}</div><div style="color:var(--muted);font-size:11px">-${fmtDur(lMs)} lunch</div></div></div>`}).filter(Boolean).join('')||`<p class="notice">No punches this week yet.</p>`;return`${tabs}<div class="card">${rows}</div><button class="btn btn-primary btn-full" id="btn-export" style="margin-top:4px">Export week CSV for HR</button>`}
+if(managerTab==='agents'){const agentRows=agents.length===0?`<p class="notice">No agents yet.</p>`:agents.map((a,i)=>{const c=colorFor(i);return`<div class="week-row"><div class="avatar" style="background:${c.bg};color:${c.text}">${initials(a.name)}</div><div style="flex:1;font-weight:500">${a.name}</div><button class="btn btn-sm" data-rid="${a.id}" style="color:#C0392B;border-color:#C0392B">Remove</button></div>`}).join('');return`${tabs}<div class="card" style="margin-bottom:12px"><div class="card-title">Add agent</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="new-name" placeholder="Full name" /><input type="password" id="new-pin" placeholder="4-digit PIN" maxlength="4" /><button class="btn btn-primary" id="btn-add">Add agent</button></div><div class="err" id="add-err"></div></div><div class="card">${agentRows}</div>`}}
 
-  return `
-  <div class="card" style="text-align:center">
-    <div class="avatar" style="background:${c.bg};color:${c.text};margin:0 auto 10px;width:48px;height:48px;font-size:15px">${initials(a.name)}</div>
-    <div style="font-size:17px;font-weight:600">${a.name}</div>
-    <div style="margin-top:6px"><span class="badge ${cls}">${label}</span></div>
-  </div>
-  ${loading ? `<div class="spinner"></div>` : `
-  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
-    ${actionBtns}
-  </div>`}
-  <div class="card">
-    <div class="card-title">Today's punches</div>
-    ${punchLog}
-  </div>
-  <button class="btn btn-ghost btn-sm btn-full" data-action="go-home" style="margin-top:4px">Done</button>`;
-}
+// Single event listener attached once — no re-attachment on render
+document.getElementById('app').addEventListener('click', async e => {
 
-function renderMgrPin() {
-  const dots = Array.from({length:4},(_,i)=>`<div class="pin-dot${i<managerPinEntry.length?' filled':''}"></div>`).join('');
-  return `
-  <button class="btn btn-ghost btn-sm" data-action="go-home" style="margin-bottom:1rem">← Back</button>
-  <div class="card" style="text-align:center">
-    <div style="font-size:16px;font-weight:600;margin-bottom:4px">Manager PIN</div>
-    <div style="font-size:13px;color:var(--muted)">Default: 0000</div>
-    <div class="pin-dots">${dots}</div>
-    <div class="pinpad">
-      ${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map(k=>`<button class="pinkey" data-mpin="${k}">${k}</button>`).join('')}
-    </div>
-    <div class="err">${managerPinErr}</div>
-  </div>`;
-}
+  // Agent PIN
+  const pinBtn=e.target.closest('[data-pin]');
+  if(pinBtn){const k=pinBtn.dataset.pin;if(k==='⌫')pinEntry=pinEntry.slice(0,-1);else if(pinEntry.length<4)pinEntry+=k;document.getElementById('pdots').innerHTML=dots(4,pinEntry);if(pinEntry.length===4){if(pinEntry===selectedAgent.pin){pinEntry='';pinErr='';view='agent';render();}else{pinErr='Incorrect PIN. Try again.';pinEntry='';document.getElementById('pdots').innerHTML=dots(4,'');document.getElementById('perr').textContent=pinErr;}}return;}
 
-function renderMgr() {
-  const active = agents.filter((a,i) => getAgentStatus(a._punches) !== 'out').length;
-  const tabs = `
-  <div class="tab-bar">
-    <button class="tab ${managerTab==='team'?'active':''}" data-tab="team">Team</button>
-    <button class="tab ${managerTab==='week'?'active':''}" data-tab="week">This week</button>
-    <button class="tab ${managerTab==='agents'?'active':''}" data-tab="agents">Manage agents</button>
-    <button class="btn btn-ghost btn-sm" data-action="go-home" style="margin-left:auto;align-self:center">Exit</button>
-  </div>`;
+  // Manager PIN
+  const mpinBtn=e.target.closest('[data-mpin]');
+  if(mpinBtn){const k=mpinBtn.dataset.mpin;if(k==='⌫')mgrEntry=mgrEntry.slice(0,-1);else if(mgrEntry.length<4)mgrEntry+=k;document.getElementById('mdots').innerHTML=dots(4,mgrEntry);if(mgrEntry.length===4){if(mgrEntry===MANAGER_PIN){mgrEntry='';mgrErr='';await loadAgents();view='mgr';render();}else{mgrErr='Incorrect PIN.';mgrEntry='';document.getElementById('mdots').innerHTML=dots(4,'');document.getElementById('merr').textContent=mgrErr;}}return;}
 
-  if (managerTab === 'team') {
-    const rows = agents.length === 0
-      ? `<p class="notice">No agents yet.</p>`
-      : agents.map((a,i) => {
-          const c = colorFor(i);
-          const status = getAgentStatus(a._punches);
-          const [label, cls] = statusLabel(status);
-          const lastPunch = a._punches && a._punches[0];
-          return `<div class="week-row">
-            <div class="avatar" style="background:${c.bg};color:${c.text}">${initials(a.name)}</div>
-            <div style="flex:1">
-              <div style="font-weight:500">${a.name}</div>
-              ${lastPunch?`<div style="font-size:12px;color:var(--muted)">${fmtDate(lastPunch.punched_at)} · ${fmtTime(lastPunch.punched_at)}</div>`:''}
-            </div>
-            <span class="badge ${cls}">${label}</span>
-          </div>`;
-        }).join('');
-    return `${tabs}
-    <div class="stat-grid">
-      <div class="stat"><div class="stat-val">${agents.length}</div><div class="stat-label">Agents</div></div>
-      <div class="stat"><div class="stat-val">${active}</div><div class="stat-label">Clocked in</div></div>
-      <div class="stat"><div class="stat-val">${agents.length-active}</div><div class="stat-label">Off</div></div>
-    </div>
-    <div class="card">${rows}</div>`;
+  // Change PIN — verify current
+  const cpoldBtn=e.target.closest('[data-cpold]');
+  if(cpoldBtn){const k=cpoldBtn.dataset.cpold;if(k==='⌫')cpEntry=cpEntry.slice(0,-1);else if(cpEntry.length<4)cpEntry+=k;document.getElementById('cpdots').innerHTML=dots(4,cpEntry);if(cpEntry.length===4){if(cpEntry===selectedAgent.pin){cpCurrent=cpEntry;cpEntry='';cpErr='';cpStep='new';render();}else{cpErr='Incorrect PIN.';cpEntry='';document.getElementById('cpdots').innerHTML=dots(4,'');document.getElementById('cperr').textContent=cpErr;}}return;}
+
+  // Change PIN — enter new
+  const cpnewBtn=e.target.closest('[data-cpnew]');
+  if(cpnewBtn){const k=cpnewBtn.dataset.cpnew;if(k==='⌫')cpEntry=cpEntry.slice(0,-1);else if(cpEntry.length<4)cpEntry+=k;document.getElementById('cpdots').innerHTML=dots(4,cpEntry);if(cpEntry.length===4){cpNew=cpEntry;cpEntry='';cpStep='confirm';render();}return;}
+
+  // Change PIN — confirm new
+  const cpconfBtn=e.target.closest('[data-cpconf]');
+  if(cpconfBtn){const k=cpconfBtn.dataset.cpconf;if(k==='⌫')cpEntry=cpEntry.slice(0,-1);else if(cpEntry.length<4)cpEntry+=k;document.getElementById('cpdots').innerHTML=dots(4,cpEntry);if(cpEntry.length===4){if(cpEntry===cpNew){try{await updatePin(selectedAgent.id,cpNew);selectedAgent.pin=cpNew;await loadAgents();cpOk='PIN updated!';cpErr='';cpEntry='';cpStep='current';render();setTimeout(()=>{view='agent';render();},1500);}catch(ex){cpErr='Could not save. Try again.';cpEntry='';document.getElementById('cpdots').innerHTML=dots(4,'');document.getElementById('cperr').textContent=cpErr;}}else{cpErr='PINs do not match. Try again.';cpEntry='';cpNew='';cpStep='new';render();}}return;}
+
+  // Punch
+  const punchBtn=e.target.closest('[data-punch]');
+  if(punchBtn){loading=true;render();try{await addPunch(selectedAgent.id,punchBtn.dataset.punch);agentPunches=await getPunches(selectedAgent.id);await loadAgents();}catch(err){alert('Could not save: '+err.message);}loading=false;render();return;}
+
+  // Tabs
+  const tabBtn=e.target.closest('[data-tab]');
+  if(tabBtn){managerTab=tabBtn.dataset.tab;if(managerTab==='week')await loadWeek();render();return;}
+
+  // Remove agent
+  const removeBtn=e.target.closest('[data-rid]');
+  if(removeBtn){if(!confirm('Remove this agent?'))return;await db('DELETE','agents',null,{'id':`eq.${removeBtn.dataset.rid}`});await loadAgents();render();return;}
+
+  // Named buttons
+  const id=e.target.id||e.target.closest('button')?.id;
+  if(id==='btn-clockin'){loading=true;render();await loadAgents();view='select';loading=false;render();}
+  else if(id==='btn-mgr'){mgrEntry='';mgrErr='';view='mgr-pin';render();}
+  else if(id==='btn-back'){
+    if(view==='change-pin'){cpStep='current';cpEntry='';cpErr='';cpOk='';view='agent';}
+    else if(view==='pin')view='select';
+    else if(view==='select')view='home';
+    else view='home';
+    render();
   }
+  else if(id==='btn-done'||id==='btn-exit'){view='home';render();}
+  else if(id==='btn-change-pin'){cpStep='current';cpEntry='';cpErr='';cpOk='';view='change-pin';render();}
+  else if(id==='btn-add'){const name=document.getElementById('new-name').value.trim();const pin=document.getElementById('new-pin').value.trim();const err=document.getElementById('add-err');if(!name){err.textContent='Enter a name.';return;}if(!/^\d{4}$/.test(pin)){err.textContent='PIN must be 4 digits.';return;}try{await db('POST','agents',{name,pin});await loadAgents();render();}catch(ex){err.textContent=ex.message;}}
+  else if(id==='btn-export'){exportCSV();}
 
-  if (managerTab === 'week') {
-    if (loading) return `${tabs}<div class="spinner"></div>`;
-    const grouped = {};
-    for (const a of agents) grouped[a.id] = {name:a.name,punches:[]};
-    for (const p of allPunches) {
-      if (grouped[p.agent_id]) grouped[p.agent_id].punches.push(p);
-    }
+  // Agent row
+  const agentRow=e.target.closest('[data-id]');
+  if(agentRow&&view==='select'){selectedAgent=agents.find(a=>a.id==agentRow.dataset.id);agentPunches=selectedAgent._punches||[];pinEntry='';pinErr='';view='pin';render();}
+});
 
-    const rows = Object.values(grouped).map(g => {
-      const punches = g.punches;
-      if (punches.length === 0) return '';
-      let shiftMs = 0, lunchMs = 0;
-      let shiftStart=null, lunchStart=null;
-      for (const p of punches) {
-        if (p.type==='shift_in')  shiftStart = new Date(p.punched_at);
-        if (p.type==='shift_out' && shiftStart) { shiftMs += new Date(p.punched_at)-shiftStart; shiftStart=null; }
-        if (p.type==='lunch_out') lunchStart = new Date(p.punched_at);
-        if (p.type==='lunch_in' && lunchStart) { lunchMs += new Date(p.punched_at)-lunchStart; lunchStart=null; }
-      }
-      const workMs = shiftMs - lunchMs;
-      const i = agents.findIndex(a=>a.name===g.name);
-      const c = colorFor(i>=0?i:0);
-      return `<div class="week-row">
-        <div class="avatar" style="background:${c.bg};color:${c.text};flex-shrink:0">${initials(g.name)}</div>
-        <div style="flex:1"><div style="font-weight:500">${g.name}</div>
-        <div style="font-size:12px;color:var(--muted)">${punches.length} punches this week</div></div>
-        <div style="text-align:right;font-size:13px">
-          <div style="font-weight:500">${fmtDur(workMs)}</div>
-          <div style="color:var(--muted);font-size:11px">-${fmtDur(lunchMs)} lunch</div>
-        </div>
-      </div>`;
-    }).filter(Boolean).join('') || `<p class="notice">No punches this week yet.</p>`;
+async function loadAgents(){try{agents=await getAgents();await Promise.all(agents.map(async a=>{a._punches=await getPunches(a.id)}))}catch(e){alert('Could not load agents: '+e.message)}}
+async function loadWeek(){loading=true;render();try{allPunches=await getAllPunches(weekStart())}catch(e){allPunches=[]}loading=false}
 
-    return `${tabs}
-    <div class="card">${rows}</div>
-    <button class="btn btn-primary btn-full" data-action="export-csv" style="margin-top:4px">Export week CSV for HR</button>`;
-  }
+function exportCSV(){const grouped={};for(const a of agents)grouped[a.id]={name:a.name,events:[]};for(const p of allPunches)if(grouped[p.agent_id])grouped[p.agent_id].events.push(p);let csv='Agent,Date,Shift Start,Shift End,Lunch Start,Lunch End,Hours Worked,Lunch Duration\n';for(const[,g]of Object.entries(grouped)){const byDay={};for(const p of g.events){const day=new Date(p.punched_at).toLocaleDateString();if(!byDay[day])byDay[day]=[];byDay[day].push(p)}for(const[day,punches]of Object.entries(byDay)){let si=null,so=null,lo=null,li=null;for(const p of punches){if(p.type==='shift_in')si=new Date(p.punched_at);if(p.type==='shift_out')so=new Date(p.punched_at);if(p.type==='lunch_out')lo=new Date(p.punched_at);if(p.type==='lunch_in')li=new Date(p.punched_at)}const lMs=(lo&&li)?li-lo:0,sMs=(si&&so)?so-si:0,wMs=sMs-lMs;const fmt=t=>t?t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';const hrs=ms=>ms>0?(ms/3600000).toFixed(2):'';csv+=`"${g.name}","${day}","${fmt(si)}","${fmt(so)}","${fmt(lo)}","${fmt(li)}","${hrs(wMs)}","${hrs(lMs)}"\n`}}const link=document.createElement('a');const week=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});link.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);link.download=`timeclock_week_${week.replace(' ','_')}.csv`;link.click()}
 
-  if (managerTab === 'agents') {
-    const agentRows = agents.length === 0
-      ? `<p class="notice">No agents yet.</p>`
-      : agents.map((a,i) => {
-          const c = colorFor(i);
-          return `<div class="week-row">
-            <div class="avatar" style="background:${c.bg};color:${c.text}">${initials(a.name)}</div>
-            <div style="flex:1;font-weight:500">${a.name}</div>
-            <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-action="remove-agent" data-id="${a.id}">Remove</button>
-          </div>`;
-        }).join('');
-    return `${tabs}
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title">Add agent</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <input type="text" id="new-name" placeholder="Full name" />
-        <input type="password" id="new-pin" placeholder="4-digit PIN" maxlength="4" />
-        <button class="btn btn-primary" data-action="add-agent">Add agent</button>
-      </div>
-      <div class="err" id="add-err"></div>
-    </div>
-    <div class="card">${agentRows}</div>`;
-  }
-}
-
-function renderSetup() {
-  return `
-  <button class="btn btn-ghost btn-sm" data-action="go-home" style="margin-bottom:1rem">← Back</button>
-  <div class="card">
-    <div class="card-title">Setup guide</div>
-    <div style="font-size:14px;line-height:1.8;color:var(--text)">
-      <p style="margin-bottom:1rem"><strong>Step 1 — Create a free Supabase account</strong><br>
-      Go to <a href="https://supabase.com" target="_blank" style="color:var(--accent)">supabase.com</a> and sign up. Create a new project.</p>
-      <p style="margin-bottom:1rem"><strong>Step 2 — Create two tables</strong><br>
-      In Supabase, open the SQL Editor and run:<br><br>
-      <code style="display:block;background:var(--bg);padding:10px;border-radius:6px;font-size:12px;font-family:'DM Mono',monospace;line-height:1.7;white-space:pre-wrap">create table agents (
-  id bigint generated always as identity primary key,
-  name text not null,
-  pin text not null
-);
-
-create table punches (
-  id bigint generated always as identity primary key,
-  agent_id bigint references agents(id),
-  type text not null,
-  punched_at timestamptz default now()
-);</code></p>
-      <p style="margin-bottom:1rem"><strong>Step 3 — Get your credentials</strong><br>
-      Go to Project Settings → API. Copy your <em>Project URL</em> and <em>anon public</em> key.</p>
-      <p style="margin-bottom:1rem"><strong>Step 4 — Edit index.html</strong><br>
-      Open this file in any text editor. At the top of the script, replace:<br>
-      <code>https://hdjujofjpyzkzzhwaegb.supabase.co</code> → your Project URL<br>
-      <code>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkanVqb2ZqcHl6a3p6aHdhZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzI5NTksImV4cCI6MjA5MTg0ODk1OX0.bVvDP_d9dALvlvVnbuACftXlp4UEiYt_peU4hudFNTc</code> → your anon key</p>
-      <p><strong>Step 5 — Host on GitHub Pages</strong><br>
-      Create a free GitHub account, make a new repository, upload this file, then go to Settings → Pages → Deploy from main branch. Your team gets a free public URL!</p>
-    </div>
-  </div>`;
-}
-
-// ─── EVENTS ──────────────────────────────────────────────────────────────────
-function attachEvents() {
-  document.getElementById('app').addEventListener('click', async e => {
-    const el = e.target.closest('[data-action],[data-pin],[data-mpin],[data-tab]');
-    if (!el) return;
-    const { action, pin, mpin, tab, id, type } = el.dataset;
-
-    if (tab) { managerTab = tab; if(tab==='week') await loadWeek(); render(); return; }
-
-    if (pin !== undefined) {
-      if (pin === '⌫') pinEntry = pinEntry.slice(0,-1);
-      else if (pinEntry.length < 4) pinEntry += pin;
-      if (pinEntry.length === 4) {
-        if (pinEntry === selectedAgent.pin) {
-          pinErr = ''; pinEntry = '';
-          loading = false; view = 'agent'; render();
-        } else { pinErr = 'Incorrect PIN. Try again.'; pinEntry = ''; render(); }
-      } else render();
-      return;
-    }
-
-    if (mpin !== undefined) {
-      if (mpin === '⌫') managerPinEntry = managerPinEntry.slice(0,-1);
-      else if (managerPinEntry.length < 4) managerPinEntry += mpin;
-      if (managerPinEntry.length === 4) {
-        if (managerPinEntry === MANAGER_PIN) {
-          managerPinErr = ''; managerPinEntry = '';
-          await loadAgents(); view = 'mgr'; render();
-        } else { managerPinErr = 'Incorrect PIN.'; managerPinEntry = ''; render(); }
-      } else render();
-      return;
-    }
-
-    if (action === 'go-home')    { view='home'; render(); }
-    else if (action === 'go-setup')   { view='setup'; render(); }
-    else if (action === 'go-mgr-pin') { view='mgr-pin'; render(); }
-    else if (action === 'go-select') {
-      loading = true; render();
-      await loadAgents(); view='select'; loading=false; render();
-    }
-    else if (action === 'select-agent') {
-      selectedAgent = agents.find(a=>a.id==id);
-      agentPunches = selectedAgent._punches || [];
-      pinEntry = ''; pinErr = '';
-      view = 'pin'; render();
-    }
-    else if (action === 'punch') {
-      loading = true; render();
-      try {
-        await addPunch(selectedAgent.id, type);
-        agentPunches = await getPunches(selectedAgent.id);
-        await loadAgents();
-      } catch(err) { alert('Could not save punch: ' + err.message); }
-      loading = false; render();
-    }
-    else if (action === 'add-agent') {
-      const name = document.getElementById('new-name').value.trim();
-      const pin  = document.getElementById('new-pin').value.trim();
-      const err  = document.getElementById('add-err');
-      if (!name) { err.textContent = 'Enter a name.'; return; }
-      if (!/^\d{4}$/.test(pin)) { err.textContent = 'PIN must be 4 digits.'; return; }
-      try {
-        await db('POST','agents',{name,pin});
-        await loadAgents(); render();
-      } catch(e) { err.textContent = e.message; }
-    }
-    else if (action === 'remove-agent') {
-      if (!confirm('Remove this agent? Their punch history will remain.')) return;
-      await db('DELETE','agents',null,{'id':`eq.${id}`});
-      await loadAgents(); render();
-    }
-    else if (action === 'export-csv') { exportCSV(); }
-  });
-}
-
-// ─── DATA LOADING ─────────────────────────────────────────────────────────────
-async function loadAgents() {
-  try {
-    agents = await getAgents();
-    await Promise.all(agents.map(async a => {
-      a._punches = await getPunches(a.id);
-    }));
-  } catch(e) {
-    if (SUPABASE_URL === 'YOUR_SUPABASE_URL') agents = [];
-    else alert('Could not load agents: ' + e.message);
-  }
-}
-
-async function loadWeek() {
-  loading = true; render();
-  try { allPunches = await getAllPunches(weekStart()); }
-  catch(e) { allPunches = []; }
-  loading = false;
-}
-
-// ─── EXPORT CSV ──────────────────────────────────────────────────────────────
-function exportCSV() {
-  const grouped = {};
-  for (const a of agents) grouped[a.id] = {name:a.name,events:[]};
-  for (const p of allPunches) {
-    if (grouped[p.agent_id]) grouped[p.agent_id].events.push(p);
-  }
-
-  let csv = 'Agent,Date,Shift Start,Shift End,Lunch Start,Lunch End,Hours Worked,Lunch Duration\n';
-  const dateMap = {};
-
-  for (const [agentId, g] of Object.entries(grouped)) {
-    const byDay = {};
-    for (const p of g.events) {
-      const day = new Date(p.punched_at).toLocaleDateString();
-      if (!byDay[day]) byDay[day] = [];
-      byDay[day].push(p);
-    }
-    for (const [day, punches] of Object.entries(byDay)) {
-      let si=null,so=null,lo=null,li=null;
-      for (const p of punches) {
-        if (p.type==='shift_in')  si = new Date(p.punched_at);
-        if (p.type==='shift_out') so = new Date(p.punched_at);
-        if (p.type==='lunch_out') lo = new Date(p.punched_at);
-        if (p.type==='lunch_in')  li = new Date(p.punched_at);
-      }
-      const lunchMs  = (lo && li) ? li-lo : 0;
-      const shiftMs  = (si && so) ? so-si : 0;
-      const workedMs = shiftMs - lunchMs;
-      const fmt = t => t ? t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-      const hrs = ms => ms > 0 ? (ms/3600000).toFixed(2) : '';
-      csv += `"${g.name}","${day}","${fmt(si)}","${fmt(so)}","${fmt(lo)}","${fmt(li)}","${hrs(workedMs)}","${hrs(lunchMs)}"\n`;
-    }
-  }
-
-  const link = document.createElement('a');
-  const week = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  link.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  link.download = `timeclock_week_${week.replace(' ','_')}.csv`;
-  link.click();
-}
-
-// ─── LIVE CLOCK ──────────────────────────────────────────────────────────────
-function updateLiveTime() {
-  const now = new Date();
-  const t = document.getElementById('live-time');
-  const d = document.getElementById('live-date');
-  if (t) t.textContent = now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  if (d) d.textContent = now.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
-}
-setInterval(updateLiveTime, 1000);
-
-// ─── INIT ────────────────────────────────────────────────────────────────────
+function updateLiveTime(){const now=new Date();const t=document.getElementById('live-time');const d=document.getElementById('live-date');if(t)t.textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});if(d)d.textContent=now.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'})}
+setInterval(updateLiveTime,1000);
 render();
 </script>
 </body>
