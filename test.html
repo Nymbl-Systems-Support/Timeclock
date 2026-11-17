@@ -93,7 +93,15 @@ select option{background:var(--surface2);}
 .userbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px;}
 .userbar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .badge-inactive{background:rgba(139,135,176,0.15);color:var(--muted);}
+.badge-ot{background:#FFE3E3;color:#B42318;}
 label.lbl{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin:2px 0 -2px;}
+textarea{width:100%;padding:11px 14px;border:1px solid #E2DAFF;border-radius:var(--radius-sm);font-family:'Inter',sans-serif;font-size:13px;background:#F8F5FF;color:#07051E;outline:none;resize:vertical;}
+textarea:focus{border-color:var(--accent);}
+.alert{border-radius:var(--radius-sm);padding:11px 14px;font-size:13px;line-height:1.45;margin-bottom:12px;}
+.alert-over{background:#FFE9E9;border:1px solid #FFB4B4;color:#8A1C1C;}
+.alert-warn{background:#FFF6DC;border:1px solid #F5D98A;color:#7A5200;}
+.stale{margin-top:4px;font-size:12px;color:#8A1C1C;background:#FFE9E9;border-radius:8px;padding:5px 8px;}
+.h-over{color:#B42318;font-weight:700;}.h-warn{color:#B76E00;font-weight:600;}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 </style>
 </head>
@@ -108,11 +116,17 @@ label.lbl{display:block;font-size:11px;font-weight:600;color:var(--muted);text-t
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 'use strict';
-/* Nymbl Timeclock — Microsoft sign-in version.
+/* Nymbl Timeclock — Microsoft sign-in version 2.
    Security is enforced by the database (Row Level Security), not by this page. */
 const SURL='https://hdjujofjpyzkzzhwaegb.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkanVqb2ZqcHl6a3p6aHdhZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzI5NTksImV4cCI6MjA5MTg0ODk1OX0.bVvDP_d9dALvlvVnbuACftXlp4UEiYt_peU4hudFNTc';
 const sb=window.supabase.createClient(SURL,SKEY,{auth:{flowType:'pkce',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+
+/* ---------- policy settings (change here) ---------- */
+const DAILY_LIMIT=8, WEEKLY_LIMIT=40;     // hours; over these = overtime flag
+const DAILY_WARN=7, WEEKLY_WARN=38;       // hours; heads-up shown from here
+const STALE_HOURS=12;                      // still clocked in this long after last punch = forgot to punch out
+const HOUR=3600000;
 
 /* ---------- helpers ---------- */
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -128,6 +142,17 @@ const todayStr=()=>ymd(new Date());
 const TOLAB={pto:'PTO',sick:'Sick',holiday:'Holiday'};
 const TOBADGE={pto:'badge-pto',sick:'badge-sick',holiday:'badge-holiday'};
 const PL={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch start',lunch_in:'Lunch end'};
+const TZ_IANA={EST:'America/New_York',CST:'America/Chicago',MST:'America/Denver',PST:'America/Los_Angeles',AKST:'America/Anchorage',HST:'Pacific/Honolulu'};
+const tzOf=a=>TZ_IANA[a&&a.timezone]||'UTC';
+const toMinute=ts=>Math.floor(new Date(ts).getTime()/60000)*60000;
+function dayKey(ts,iana){
+  const p=new Intl.DateTimeFormat('en-US',{timeZone:iana,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(ts));
+  const g=t=>p.find(x=>x.type===t).value;
+  return g('year')+'-'+g('month')+'-'+g('day');
+}
+const fmtTz=(ts,iana)=>new Intl.DateTimeFormat('en-US',{timeZone:iana,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(ts));
+const dayLabel=k=>new Date(k+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric',timeZone:'UTC'});
+const hrs2=ms=>(Math.round(ms/36000)/100).toFixed(2);
 
 function getWeekRange(offset){
   const now=new Date(),day=now.getDay();
@@ -138,17 +163,36 @@ function getWeekRange(offset){
 function statusOf(p){if(!p)return'out';if(p.type==='shift_in'||p.type==='lunch_in')return'in';if(p.type==='lunch_out')return'lunch';return'out';}
 function statusLabel(s){if(s==='in')return['In','badge-in'];if(s==='lunch')return['On lunch','badge-lunch'];return['Out','badge-out'];}
 function actions(s){if(s==='out')return[['shift_in','Punch in','btn-primary']];if(s==='in')return[['lunch_out','🍽 Start lunch','btn-lunch'],['shift_out','Punch out','btn-danger']];if(s==='lunch')return[['lunch_in','🍽 End lunch','btn-lunch'],['shift_out','Punch out','btn-danger']];return[];}
-const toMinute=ts=>Math.floor(new Date(ts).getTime()/60000)*60000;
-function workedMs(punches){ // punches ascending
-  let sMs=0,lMs=0,sS=null,lS=null;
-  punches.forEach(p=>{const t=toMinute(p.punched_at);
-    if(p.type==='shift_in')sS=t;
-    if(p.type==='shift_out'&&sS!==null){sMs+=t-sS;sS=null;}
-    if(p.type==='lunch_out')lS=t;
-    if(p.type==='lunch_in'&&lS!==null){lMs+=t-lS;lS=null;}
+
+/* Worked time per day — same method as the HR export, so every number in the app agrees.
+   Punch times count to the minute. Day = the employee's own time zone. */
+function dayCalc(punches,iana,nowMs){
+  const byDay={};
+  punches.forEach(p=>{const d=dayKey(p.punched_at,iana);(byDay[d]=byDay[d]||[]).push(p);});
+  const todayK=nowMs!=null?dayKey(nowMs,iana):null;
+  const res={};let total=0;
+  Object.keys(byDay).sort().forEach(d=>{
+    const ps=byDay[d].slice().sort((a,b)=>new Date(a.punched_at)-new Date(b.punched_at));
+    let dayMs=0,lastIn=null,lastBreakOut=null,breakMs=0;
+    ps.forEach(p=>{const t=toMinute(p.punched_at);
+      if(p.type==='shift_in')lastIn=t;
+      else if(p.type==='lunch_out')lastBreakOut=t;
+      else if(p.type==='lunch_in'){if(lastBreakOut!==null)breakMs+=t-lastBreakOut;lastBreakOut=null;}
+      else if(p.type==='shift_out'){if(lastIn!==null)dayMs+=t-lastIn;lastIn=null;}
+    });
+    if(d===todayK&&lastIn!==null){ // shift still open today: count time so far
+      const n=toMinute(nowMs);dayMs+=Math.max(0,n-lastIn);if(lastBreakOut!==null)breakMs+=Math.max(0,n-lastBreakOut);
+    }
+    const ms=Math.max(0,dayMs-breakMs);res[d]=ms;total+=ms;
   });
-  return Math.max(0,sMs-lMs);
+  return{byDay:res,total};
 }
+function flagsFor(a,punches,nowMs){
+  const c=dayCalc(punches,tzOf(a),nowMs);
+  const dayOver=Object.entries(c.byDay).filter(([,ms])=>ms>DAILY_LIMIT*HOUR).map(([d,ms])=>({day:d,ms}));
+  return{c,dayOver,weekOver:c.total>WEEKLY_LIMIT*HOUR,weekMs:c.total};
+}
+const lvl=(h,warn,lim)=>h>lim?'over':h>=warn?'warn':'';
 function errMsg(e){
   const m=(e&&e.message)?e.message:String(e);
   if(e&&e.code==='23505')return 'That entry already exists (the email or name is already in use).';
@@ -158,8 +202,8 @@ function errMsg(e){
 async function must(p){const r=await p;if(r.error)throw r.error;return r.data;}
 async function guard(fn){try{await fn();}catch(e){alert('Error: '+errMsg(e));}}
 async function fetchAll(build){let out=[],from=0;const step=1000;for(;;){const rows=await must(build(from,from+step-1));out=out.concat(rows||[]);if(!rows||rows.length<step)break;from+=step;}return out;}
-async function getPunches(id,start,end){
-  let q=sb.from('punches').select('*').eq('agent_id',id).order('punched_at',{ascending:false}).limit(200);
+async function getPunches(id,start,end,limit){
+  let q=sb.from('punches').select('*').eq('agent_id',id).order('punched_at',{ascending:false}).limit(limit||200);
   if(start)q=q.gte('punched_at',start.toISOString());
   if(end)q=q.lte('punched_at',end.toISOString());
   return (await must(q))||[];
@@ -167,36 +211,44 @@ async function getPunches(id,start,end){
 const getTO=id=>must(sb.from('time_off').select('*').eq('agent_id',id).order('date',{ascending:false}).limit(50));
 
 /* ---------- state ---------- */
-let view='loading',session=null,me={agent:null,roles:[],isAdmin:false,isMgr:false};
-let teams=[],agents=[],latest={},managers=[];
+let view='loading',session=null,me={agent:null,roles:[],isAdmin:false,isHR:false,isManager:false,isMgr:false};
+let teams=[],agents=[],latest={},managers=[],holidays=[],curPunches=[],roster=[];
 let tab='me',teamFilter='all',showInactive=false,loading=false,loginErr='';
-let myPunches=[],myWeek=[],myTab='today';
+let myPunches=[],myWeek=[],myTO=[],myTab='today';
 let wPunches=[],wTO=[],wkOffset=0;
-let editAgent=null,editPunches=[],editMsg='',editingPunchId=null;
+let editAgent=null,editPunches=[],editMsg='',editingPunchId=null,editLimit=60,backTab='agents';
 let toAgent=null,toList=[],toMsg='';
-let agMsg='',adminMsg='',agEditing=null;
+let agMsg='',adminMsg='',agEditing=null,holTxt='',holMsg='',holOk=false,holPast=false,backupMsg='';
 
 function resetState(){
-  me={agent:null,roles:[],isAdmin:false,isMgr:false};
-  teams=[];agents=[];latest={};managers=[];myPunches=[];myWeek=[];wPunches=[];wTO=[];
-  tab='me';teamFilter='all';wkOffset=0;myTab='today';
+  me={agent:null,roles:[],isAdmin:false,isHR:false,isManager:false,isMgr:false};
+  teams=[];agents=[];latest={};managers=[];holidays=[];curPunches=[];roster=[];myPunches=[];myWeek=[];myTO=[];wPunches=[];wTO=[];
+  tab='me';teamFilter='all';wkOffset=0;myTab='today';holTxt='';holMsg='';backupMsg='';
 }
 const teamName=id=>{const t=teams.find(x=>x.id===id);return t?t.name:'';};
-const manageable=()=>me.isAdmin?teams:teams.filter(t=>me.roles.some(r=>r.team_id===t.id));
+const manageable=()=>me.isAdmin?teams:teams.filter(t=>me.roles.some(r=>r.role==='manager'&&r.team_id===t.id));
+const canEditAgent=a=>!!a&&(me.isAdmin||me.roles.some(r=>r.role==='manager'&&r.team_id===a.team_id));
 const vis=()=>agents.filter(a=>teamFilter==='all'||a.team_id===teamFilter);
 
 /* ---------- data loading ---------- */
 async function loadMgrData(){
-  const [ag,lp,tm]=await Promise.all([
+  const [ag,lp,tm,hol]=await Promise.all([
     must(sb.from('agents').select('*').order('name')),
     must(sb.rpc('latest_punches')),
-    me.isAdmin?must(sb.from('team_members').select('*').order('email')):Promise.resolve([])
+    me.isAdmin?must(sb.from('team_members').select('*').order('email')):Promise.resolve([]),
+    me.isAdmin?must(sb.from('holidays').select('*').order('date')):Promise.resolve([])
   ]);
-  agents=ag||[];latest={};(lp||[]).forEach(p=>{latest[p.agent_id]=p;});managers=tm||[];
+  agents=ag||[];latest={};(lp||[]).forEach(p=>{latest[p.agent_id]=p;});managers=tm||[];holidays=hol||[];
+}
+async function loadCurWeek(){
+  const{start,end}=getWeekRange(0);
+  curPunches=await fetchAll((f,t)=>sb.from('punches').select('*').gte('punched_at',start.toISOString()).lte('punched_at',end.toISOString()).order('punched_at',{ascending:true}).order('id').range(f,t));
 }
 async function loadMine(){
+  const{start,end}=getWeekRange(0);
   myPunches=await getPunches(me.agent.id);
-  if(myTab==='week'){const{start,end}=getWeekRange(0);myWeek=await getPunches(me.agent.id,start,end);}
+  myWeek=await getPunches(me.agent.id,start,end);
+  myTO=(await must(sb.from('time_off').select('*').eq('agent_id',me.agent.id).gte('date',ymd(start)).lte('date',ymd(end)).order('date')))||[];
 }
 async function loadWeek(){
   loading=true;render();
@@ -214,10 +266,7 @@ async function boot(){
   const h=new URLSearchParams(location.hash.replace(/^#/,''));
   const oauthErr=q.get('error_description')||h.get('error_description');
   if(oauthErr)loginErr=oauthErr;
-  try{
-    const{data}=await sb.auth.getSession();
-    session=data.session;
-  }catch(e){loginErr='Sign-in problem: '+errMsg(e);}
+  try{const{data}=await sb.auth.getSession();session=data.session;}catch(e){loginErr='Sign-in problem: '+errMsg(e);}
   if(q.get('code')||q.get('error')||h.get('error'))history.replaceState({},document.title,location.pathname);
   sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&session){session=null;resetState();view='login';render();}});
   if(session)await enter();else{view='login';render();}
@@ -225,7 +274,7 @@ async function boot(){
 async function enter(){
   view='loading';render();
   try{
-    await sb.rpc('claim_access'); // links this login to the agent/manager record with the same email
+    await sb.rpc('claim_access'); // links this login to the employee/manager record with the same email
     const uid=session.user.id;
     const[a,tm]=await Promise.all([
       must(sb.from('agents').select('*').eq('user_id',uid)),
@@ -233,14 +282,16 @@ async function enter(){
     ]);
     me.agent=(a&&a[0])||null;me.roles=tm||[];
     me.isAdmin=me.roles.some(r=>r.role==='admin'&&r.team_id==null);
-    me.isMgr=me.roles.length>0;
+    me.isHR=me.roles.some(r=>r.role==='hr'&&r.team_id==null);
+    me.isManager=me.roles.some(r=>r.role==='manager');
+    me.isMgr=me.isAdmin||me.isHR||me.isManager;
     teams=(await must(sb.from('teams').select('*').order('name')))||[];
     if(!me.isMgr&&!me.agent){view='noaccess';render();return;}
     if(!me.isMgr&&me.agent&&!me.agent.active){view='inactive';render();return;}
-    if(me.isMgr)await loadMgrData();
-    const isAgent=!!(me.agent&&me.agent.active);
-    if(isAgent)await loadMine();
-    tab=isAgent?'me':'team';
+    const isEmp=!!(me.agent&&me.agent.active);
+    if(me.isMgr){await loadMgrData();await loadCurWeek();}
+    if(isEmp){await loadMine();if(!me.isMgr)roster=(await must(sb.rpc('team_roster')))||[];}
+    tab=isEmp?'me':'team';
     view='main';render();
   }catch(e){loginErr='Could not load your account: '+errMsg(e);view='error';render();}
 }
@@ -252,7 +303,12 @@ function render(){
   updateClock();
 }
 const heroClock=()=>'<div class="hero-card"><div class="time-display" id="lt" style="color:#26045E;margin-bottom:4px"></div><div style="font-size:12px;color:#7B6FA8;letter-spacing:0.05em" id="ld"></div></div>';
-const userbar=()=>'<div class="userbar"><span>'+esc(session&&session.user.email||'')+'</span><button class="btn btn-ghost btn-sm" id="b-logout">Sign out</button></div>';
+function roleLabel(){
+  if(me.isAdmin)return 'Org Admin';
+  const r=[];if(me.isHR)r.push('HR');if(me.isManager)r.push('Manager');
+  return r.join(' · ');
+}
+const userbar=()=>'<div class="userbar"><span>'+esc(session&&session.user.email||'')+(roleLabel()?' · '+esc(roleLabel()):'')+'</span><button class="btn btn-ghost btn-sm" id="b-logout">Sign out</button></div>';
 const rLoading=()=>'<div class="spinner"></div>';
 function rLogin(){
   return heroClock()+'<div style="display:flex;flex-direction:column;gap:10px"><button class="btn btn-primary btn-full" id="b-login" style="font-size:16px;padding:16px;font-family:Sora,sans-serif;font-weight:600;color:#fff">Sign in with Microsoft</button></div><div class="err">'+esc(loginErr)+'</div><p class="notice">Use your Nymbl work account.</p>';
@@ -269,7 +325,8 @@ function rError(){
 function tabsFor(){
   const t=[];
   if(me.agent&&me.agent.active)t.push(['me','My time']);
-  if(me.isMgr){t.push(['team','Team'],['week','Reports'],['agents','Agents']);if(me.isAdmin)t.push(['admin','Admin']);}
+  if(me.isMgr){t.push(['team','Team'],['week','Reports'],['agents','Employees']);if(me.isAdmin)t.push(['admin','Admin']);}
+  else if(me.agent&&me.agent.active)t.push(['roster','My team']);
   return t;
 }
 const tabSty=k=>'padding:9px 12px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:'+(tab===k?'var(--text)':'var(--muted)')+';border-bottom:2px solid '+(tab===k?'var(--accent)':'transparent')+';margin-bottom:-1px;font-family:Inter,sans-serif;';
@@ -279,12 +336,30 @@ function teamSelect(){
 }
 function rMain(){
   const tabs=tabsFor();
-  if(!tabs.length){return userbar()+'<p class="notice">Nothing to show.</p>';}
+  if(!tabs.length)return userbar()+'<p class="notice">Nothing to show.</p>';
   if(!tabs.find(t=>t[0]===tab))tab=tabs[0][0];
   const bar='<div class="tab-bar">'+tabs.map(([k,l])=>'<button style="'+tabSty(k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>';
-  const body={me:rMe,team:rTeam,week:rWeek,agents:rAgents,admin:rAdmin}[tab]();
+  const body={me:rMe,team:rTeam,week:rWeek,agents:rAgents,admin:rAdmin,roster:rRoster}[tab]();
   return userbar()+bar+body;
 }
+
+/* ----- employee: alerts ----- */
+function myAlerts(){
+  const a=me.agent;if(!a)return[];
+  const now=Date.now(),iana=tzOf(a),c=dayCalc(myWeek,iana,now);
+  const todayMs=c.byDay[dayKey(now,iana)]||0,out=[];
+  const tH=todayMs/HOUR,wH=c.total/HOUR;
+  const ot='Overtime is not allowed without prior approval from management.';
+  if(tH>DAILY_LIMIT)out.push(['over','You are over '+DAILY_LIMIT+' hours today ('+fmtDur(todayMs)+'). '+ot+' Please clock out or check with your manager.']);
+  else if(tH>=DAILY_WARN)out.push(['warn','Heads up: you have worked '+fmtDur(todayMs)+' today. '+ot]);
+  if(wH>WEEKLY_LIMIT)out.push(['over','You are over '+WEEKLY_LIMIT+' hours this week ('+fmtDur(c.total)+'). '+ot]);
+  else if(wH>=WEEKLY_WARN)out.push(['warn','Heads up: you have worked '+fmtDur(c.total)+' this week. '+ot]);
+  const lp=myPunches[0];
+  if(lp&&statusOf(lp)!=='out'&&now-new Date(lp.punched_at).getTime()>STALE_HOURS*HOUR)
+    out.push(['over','Your last punch was '+fmtD(lp.punched_at)+' at '+fmtT(lp.punched_at)+' and you are still clocked in. If you forgot to punch out, tell your manager so the time can be corrected.']);
+  return out;
+}
+const alertsHtml=()=>myAlerts().map(([k,m])=>'<div class="alert alert-'+k+'">'+(k==='over'?'⚠ ':'ⓘ ')+esc(m)+'</div>').join('');
 
 function rMe(){
   const a=me.agent,c=clr(a.id),s=statusOf(myPunches[0]),[lb,cls]=statusLabel(s);
@@ -297,110 +372,224 @@ function rMe(){
   if(myTab==='today'){
     const log=today.length===0?'<p class="notice" style="padding:0.5rem 0">No punches yet today</p>':today.map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('');
     content='<div class="card"><div class="card-title">Today\'s punches</div>'+log+'</div>';
-  }else if(myWeek.length===0){
-    content='<div class="card"><p class="notice">No punches this week.</p></div>';
   }else{
     const byDay={};
     myWeek.forEach(p=>{const d=fmtD(p.punched_at);(byDay[d]=byDay[d]||[]).push(p);});
-    const total=workedMs([...myWeek].reverse());
-    content='<div class="card"><div class="card-title">Worked this week: '+fmtDur(total)+'</div>'+Object.entries(byDay).map(([day,ps])=>'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;padding:6px 0 4px">'+esc(day)+'</div>'+[...ps].reverse().map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('')+'</div>').join('')+'</div>';
+    const tot=dayCalc(myWeek,tzOf(a),Date.now()).total;
+    const toRows=myTO.map(t=>'<div class="punch-row"><span><span class="badge '+(TOBADGE[t.type]||'badge-out')+'">'+esc(TOLAB[t.type]||t.type)+'</span> '+esc(t.date)+(t.note?' · '+esc(t.note):'')+'</span><span>'+esc(t.hours)+'h</span></div>').join('');
+    content='<div class="card"><div class="card-title">Worked this week: '+fmtDur(tot)+'</div>'+(myWeek.length?Object.entries(byDay).map(([day,ps])=>'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;padding:6px 0 4px">'+esc(day)+'</div>'+[...ps].reverse().map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('')+'</div>').join(''):'<p class="notice">No punches this week.</p>')+'</div>'+(toRows?'<div class="card"><div class="card-title">Time off this week</div>'+toRows+'</div>':'');
   }
-  return heroClock()+'<div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">'+btns+'</div>')+tabs+content;
+  return heroClock()+'<div id="otbanner">'+alertsHtml()+'</div><div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">'+btns+'</div>')+tabs+content;
+}
+function rRoster(){
+  const t=me.agent&&teamName(me.agent.team_id);
+  const rows=roster.length?roster.map(r=>{const c=clr(r.id);return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(r.name))+'</div><div style="flex:1;font-weight:500">'+esc(r.name)+'</div></div>';}).join(''):'<p class="notice">No one else on your team yet.</p>';
+  return '<div class="card"><div class="card-title">'+esc(t||'My team')+' · active members</div>'+rows+'</div>';
 }
 
+/* ----- team board ----- */
 function rTeam(){
-  const list=vis().filter(a=>a.active);
-  const clocked=list.filter(a=>statusOf(latest[a.id])!=='out').length;
-  const rows=list.length===0?'<p class="notice">No active agents.</p>':list.map(a=>{
-    const c=clr(a.id),lp=latest[a.id],[lb,cls]=statusLabel(statusOf(lp));
-    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1"><div style="font-weight:500">'+esc(a.name)+'</div>'+(lp?'<div style="font-size:11px;color:var(--muted)">'+fmtD(lp.punched_at)+' · '+fmtT(lp.punched_at)+'</div>':'')+'</div><span class="badge '+cls+'">'+lb+'</span></div>';
-  }).join('');
-  return teamSelect()+'<div class="stat-grid"><div class="stat"><div class="stat-val">'+list.length+'</div><div class="stat-label">Agents</div></div><div class="stat"><div class="stat-val" style="color:#7748FF">'+clocked+'</div><div class="stat-label">Clocked in</div></div><div class="stat"><div class="stat-val">'+(list.length-clocked)+'</div><div class="stat-label">Off</div></div></div><div class="card">'+rows+'</div>';
+  const list=vis().filter(a=>a.active).sort((x,y)=>x.name.localeCompare(y.name));
+  const now=Date.now(),by={};
+  curPunches.forEach(p=>{(by[p.agent_id]=by[p.agent_id]||[]).push(p);});
+  let clocked=0,alerts=0;
+  const rows=list.map(a=>{
+    const lp=latest[a.id],s=statusOf(lp);if(s!=='out')clocked++;
+    const f=flagsFor(a,by[a.id]||[],now);
+    const tH=(f.c.byDay[dayKey(now,tzOf(a))]||0)/HOUR,wH=f.weekMs/HOUR;
+    const ld=lvl(tH,DAILY_WARN,DAILY_LIMIT),lw=lvl(wH,WEEKLY_WARN,WEEKLY_LIMIT);
+    const stale=s!=='out'&&lp&&(now-new Date(lp.punched_at).getTime())>STALE_HOURS*HOUR;
+    if(ld==='over'||lw==='over'||stale)alerts++;
+    const c=clr(a.id),[lb,cls]=statusLabel(s);
+    const hrsLine='<div style="font-size:11px;color:var(--muted)">Today <span class="h-'+ld+'">'+tH.toFixed(1)+'h</span> · Week <span class="h-'+lw+'">'+wH.toFixed(1)+'h</span>'+(lp?' · '+fmtD(lp.punched_at)+' '+fmtT(lp.punched_at):'')+'</div>';
+    const flags=(ld==='over'?'<span class="badge badge-ot">Over '+DAILY_LIMIT+'h today</span> ':'')+(lw==='over'?'<span class="badge badge-ot">Over '+WEEKLY_LIMIT+'h week</span> ':'');
+    const staleHtml=stale?'<div class="stale">⚠ Still clocked in since '+fmtD(lp.punched_at)+' '+fmtT(lp.punched_at)+' — forgot to punch out?'+(canEditAgent(a)?' <button class="btn btn-sm" data-fix="'+a.id+'" style="font-size:11px;padding:3px 8px">Fix</button>':'')+'</div>':'';
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:110px"><div style="font-weight:500">'+esc(a.name)+'</div>'+hrsLine+(flags?'<div style="margin-top:3px">'+flags+'</div>':'')+staleHtml+'</div><span class="badge '+cls+'">'+lb+'</span></div>';
+  }).join('')||'<p class="notice">No active employees.</p>';
+  return teamSelect()+'<div class="stat-grid"><div class="stat"><div class="stat-val">'+list.length+'</div><div class="stat-label">Employees</div></div><div class="stat"><div class="stat-val" style="color:#7748FF">'+clocked+'</div><div class="stat-label">Clocked in</div></div><div class="stat"><div class="stat-val"'+(alerts?' style="color:#FF5959"':'')+'>'+alerts+'</div><div class="stat-label">Alerts</div></div></div><div class="card">'+rows+'</div>';
 }
 
-function weekGroups(){
-  const g={};
-  vis().forEach(a=>{g[a.id]={a,punches:[],to:[]};});
-  wPunches.forEach(p=>{if(g[p.agent_id])g[p.agent_id].punches.push(p);});
-  wTO.forEach(t=>{if(g[t.agent_id])g[t.agent_id].to.push(t);});
-  return g;
+/* ----- reports ----- */
+function buildReport(){
+  const{start,end}=getWeekRange(wkOffset);
+  const nowMs=wkOffset===0?Date.now():null,past=wkOffset<0,rows=[];
+  vis().forEach(a=>{
+    const ps=wPunches.filter(p=>p.agent_id===a.id),to=wTO.filter(t=>t.agent_id===a.id);
+    if(!ps.length&&!to.length)return;
+    const f=flagsFor(a,ps,nowMs);
+    const toBy={pto:0,sick:0,holiday:0};to.forEach(t=>{toBy[t.type]=(toBy[t.type]||0)+Number(t.hours);});
+    const toH=Object.values(toBy).reduce((x,y)=>x+y,0);
+    const issues=[];
+    f.dayOver.forEach(d=>issues.push({kind:'day',text:'Over '+DAILY_LIMIT+'h on '+dayLabel(d.day)+' ('+fmtDur(d.ms)+')'}));
+    if(f.weekOver)issues.push({kind:'week',text:'Over '+WEEKLY_LIMIT+'h for the week ('+fmtDur(f.weekMs)+')'});
+    const sorted=ps.slice().sort((x,y)=>new Date(x.punched_at)-new Date(y.punched_at));
+    const lp=sorted[sorted.length-1];
+    if(lp&&statusOf(lp)!=='out'&&(past||Date.now()-new Date(lp.punched_at).getTime()>STALE_HOURS*HOUR))
+      issues.push({kind:'open',text:'No punch-out after '+dayLabel(dayKey(lp.punched_at,tzOf(a)))+' '+fmtTz(lp.punched_at,tzOf(a))});
+    rows.push({a,ps:sorted,to,c:f.c,workedMs:f.weekMs,toBy,toH,issues});
+  });
+  rows.sort((x,y)=>(teamName(x.a.team_id)||'').localeCompare(teamName(y.a.team_id)||'')||x.a.name.localeCompare(y.a.name));
+  return{start,end,rows};
 }
 function rWeek(){
   if(loading)return teamSelect()+'<div class="spinner"></div>';
-  const{start,end}=getWeekRange(wkOffset);
+  const R=buildReport();
   const fmt=d=>d.toLocaleDateString([],{month:'short',day:'numeric'});
-  const nav='<div class="week-nav"><button class="btn btn-sm btn-ghost" id="b-wp">← Prev</button><span>'+fmt(start)+' – '+fmt(end)+'</span><button class="btn btn-sm btn-ghost" id="b-wn"'+(wkOffset===0?' disabled style="opacity:0.3"':'')+'>Next →</button></div>';
-  const rows=Object.values(weekGroups()).map(g=>{
-    if(!g.punches.length&&!g.to.length)return'';
-    const wMs=workedMs(g.punches),toH=g.to.reduce((s,t)=>s+Number(t.hours),0);
-    const toBadges=g.to.map(t=>'<span class="badge '+(TOBADGE[t.type]||'badge-out')+'" style="margin-right:3px">'+esc(TOLAB[t.type]||t.type)+' '+esc(t.hours)+'h</span>').join('');
-    const c=clr(g.a.id);
-    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';flex-shrink:0">'+esc(initials(g.a.name))+'</div><div style="flex:1;min-width:100px"><div style="font-weight:500">'+esc(g.a.name)+(g.a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div>'+(toBadges?'<div style="margin-top:3px">'+toBadges+'</div>':'')+'</div><div style="text-align:right;font-size:13px"><div style="font-weight:600;font-family:Sora,sans-serif">'+fmtDur(wMs)+'</div>'+(toH?'<div style="color:var(--muted);font-size:11px">+'+toH+'h off</div>':'')+'</div></div>';
-  }).filter(Boolean).join('')||'<p class="notice">No data for this week.</p>';
-  return teamSelect()+nav+'<div class="card">'+rows+'</div><button class="btn btn-primary btn-full" id="b-export" style="margin-top:4px">Export CSV for HR</button>';
+  const nav='<div class="week-nav"><button class="btn btn-sm btn-ghost" id="b-wp">← Prev</button><span>'+fmt(R.start)+' – '+fmt(R.end)+'</span><button class="btn btn-sm btn-ghost" id="b-wn"'+(wkOffset===0?' disabled style="opacity:0.3"':'')+'>Next →</button></div>';
+  const issueRows=[];
+  R.rows.forEach(r=>r.issues.forEach(i=>issueRows.push('<div class="row-item"><div style="flex:1"><b>'+esc(r.a.name)+'</b><div style="font-size:12px;color:var(--muted)">'+esc(i.text)+'</div></div><span class="badge '+(i.kind==='open'?'badge-lunch':'badge-ot')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span></div>')));
+  const exc=issueRows.length?'<div class="card"><div class="card-title">Needs attention ('+issueRows.length+')</div>'+issueRows.join('')+'</div>':'';
+  let teamSum='';
+  if(teams.length>1){
+    const g={};R.rows.forEach(r=>{const n=teamName(r.a.team_id)||'—';const o=g[n]=g[n]||{n:0,w:0,t:0,f:0};o.n++;o.w+=r.workedMs;o.t+=r.toH;o.f+=r.issues.length;});
+    const names=Object.keys(g).sort();
+    if(names.length>1)teamSum='<div class="card"><div class="card-title">By team</div>'+names.map(n=>'<div class="row-item"><div style="flex:1;font-weight:500">'+esc(n)+'<div style="font-size:11px;color:var(--muted)">'+g[n].n+' employee'+(g[n].n===1?'':'s')+(g[n].f?' · '+g[n].f+' flag'+(g[n].f>1?'s':''):'')+'</div></div><div style="text-align:right;font-size:13px"><b style="font-family:Sora,sans-serif">'+fmtDur(g[n].w)+'</b>'+(g[n].t?'<div style="font-size:11px;color:var(--muted)">+'+g[n].t+'h off</div>':'')+'</div></div>').join('')+'</div>';
+  }
+  const rows=R.rows.map(r=>{
+    const c=clr(r.a.id);
+    const toBadges=Object.entries(r.toBy).filter(([,h])=>h>0).map(([k,h])=>'<span class="badge '+(TOBADGE[k]||'badge-out')+'" style="margin-right:3px">'+esc(TOLAB[k]||k)+' '+h+'h</span>').join('');
+    const ot=r.issues.some(i=>i.kind!=='open')?'<span class="badge badge-ot" style="margin-left:4px">OT</span>':'';
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';flex-shrink:0">'+esc(initials(r.a.name))+'</div><div style="flex:1;min-width:100px"><div style="font-weight:500">'+esc(r.a.name)+(r.a.active?'':' <span class="badge badge-inactive">Inactive</span>')+ot+'</div>'+(teams.length>1?'<div style="font-size:11px;color:var(--muted)">'+esc(teamName(r.a.team_id))+'</div>':'')+(toBadges?'<div style="margin-top:3px">'+toBadges+'</div>':'')+'</div><div style="text-align:right;font-size:13px"><div style="font-weight:600;font-family:Sora,sans-serif">'+fmtDur(r.workedMs)+'</div></div></div>';
+  }).join('')||'<p class="notice">No data for this week.</p>';
+  return teamSelect()+nav+exc+teamSum+'<div class="card">'+rows+'</div><div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" id="b-print">Print / PDF report</button><button class="btn btn-full" id="b-export">Export CSV for payroll</button></div>';
 }
 
-function rAgents(){
-  const mt=manageable();
-  const list=vis();
-  const act=list.filter(a=>a.active),inact=list.filter(a=>!a.active);
-  const shown=showInactive?act.concat(inact):act;
-  const row=a=>{
-    const c=clr(a.id);
-    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:120px"><div style="font-weight:500">'+esc(a.name)+(a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div><div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(a.email||'No email yet')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(a.timezone||'')+(teams.length>1&&teamName(a.team_id)?' · '+esc(teamName(a.team_id)):'')+'</div></div><div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn btn-sm" data-edag="'+a.id+'" style="font-size:11px">Edit</button><button class="btn btn-sm" data-tob="'+a.id+'" style="font-size:11px">Time off</button><button class="btn btn-sm" data-epb="'+a.id+'" style="font-size:11px">Punches</button>'+(a.active?'<button class="btn btn-sm" data-deact="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Deactivate</button>':'<button class="btn btn-sm btn-primary" data-react="'+a.id+'" style="font-size:11px">Reactivate</button>')+'</div></div>';
-  };
-  const defTeam=teamFilter!=='all'&&mt.find(t=>t.id===teamFilter)?teamFilter:(mt[0]&&mt[0].id);
-  const teamPick=mt.length>1?'<select id="nt">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===defTeam?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
-  return teamSelect()+'<div class="card" style="margin-bottom:12px"><div class="card-title">Add agent</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="nn" placeholder="Full name" /><input type="email" id="ne" placeholder="Work email (used to sign in)" />'+tzSelect('ntz','EST')+teamPick+'<button class="btn btn-primary" id="b-add">Add agent</button></div><div class="err" id="ae">'+esc(agMsg)+'</div></div><div class="card"><div class="card-title">Agents ('+act.length+' active)</div>'+(shown.length?shown.map(row).join(''):'<p class="notice">No agents yet.</p>')+(inact.length?'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);padding-top:12px;cursor:pointer"><input type="checkbox" id="show-inact" style="width:auto"'+(showInactive?' checked':'')+'> Show inactive ('+inact.length+')</label>':'')+'</div>';
-}
+/* ----- employees list ----- */
 function tzSelect(id,sel){
   const opts=[['EST','EST — Eastern'],['CST','CST — Central'],['MST','MST — Mountain'],['PST','PST — Pacific'],['AKST','AKST — Alaska'],['HST','HST — Hawaii']];
   return '<select id="'+id+'">'+opts.map(([v,l])=>'<option value="'+v+'"'+(v===sel?' selected':'')+'>'+l+'</option>').join('')+'</select>';
 }
+function rAgents(){
+  const mt=manageable(),list=vis();
+  const act=list.filter(a=>a.active),inact=list.filter(a=>!a.active);
+  const shown=showInactive?act.concat(inact):act;
+  const row=a=>{
+    const c=clr(a.id),ed=canEditAgent(a);
+    const delOk=ed&&!latest[a.id]&&!(session&&a.user_id===session.user.id); // never punched (and not you) = safe to delete
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:120px"><div style="font-weight:500">'+esc(a.name)+(a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div><div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(a.email||'No email yet')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(a.timezone||'')+(teams.length>1&&teamName(a.team_id)?' · '+esc(teamName(a.team_id)):'')+'</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">'+(ed?'<button class="btn btn-sm" data-edag="'+a.id+'" style="font-size:11px">Edit</button>':'')+'<button class="btn btn-sm" data-tob="'+a.id+'" style="font-size:11px">Time off</button><button class="btn btn-sm" data-epb="'+a.id+'" style="font-size:11px">Punches</button>'+(ed?(a.active?'<button class="btn btn-sm" data-deact="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Deactivate</button>':'<button class="btn btn-sm btn-primary" data-react="'+a.id+'" style="font-size:11px">Reactivate</button>'):'')+(delOk?'<button class="btn btn-sm" data-delag="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Delete</button>':'')+'</div></div>';
+  };
+  let form='';
+  if(mt.length){
+    const defTeam=teamFilter!=='all'&&mt.find(t=>t.id===teamFilter)?teamFilter:mt[0].id;
+    const teamPick=mt.length>1?'<select id="nt">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===defTeam?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
+    form='<div class="card" style="margin-bottom:12px"><div class="card-title">Add employee</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="nn" placeholder="Full name" /><input type="email" id="ne" placeholder="Work email (used to sign in)" />'+tzSelect('ntz','EST')+teamPick+'<button class="btn btn-primary" id="b-add">Add employee</button></div><div class="err" id="ae">'+esc(agMsg)+'</div></div>';
+  }
+  return teamSelect()+(me.isHR&&!me.isAdmin&&!me.isManager?'<p class="notice" style="padding:0 0 10px;text-align:left">HR view — you can see everything but not change it.</p>':'')+form+'<div class="card"><div class="card-title">Employees ('+act.length+' active)</div>'+(shown.length?shown.map(row).join(''):'<p class="notice">No employees yet.</p>')+(inact.length?'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);padding-top:12px;cursor:pointer"><input type="checkbox" id="show-inact" style="width:auto"'+(showInactive?' checked':'')+'> Show inactive ('+inact.length+')</label>':'')+'</div>';
+}
 function rEditAgent(){
   const a=agEditing,mt=manageable();
   const teamPick=mt.length>1?'<label class="lbl">Team</label><select id="eat">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===a.team_id?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
-  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div class="card-title">Edit agent</div><div style="display:flex;flex-direction:column;gap:8px"><label class="lbl">Name</label><input type="text" id="ean" value="'+esc(a.name)+'" /><label class="lbl">Work email</label><input type="email" id="eae" value="'+esc(a.email||'')+'" /><label class="lbl">Time zone</label>'+tzSelect('eaz',a.timezone||'EST')+teamPick+'<button class="btn btn-primary" id="b-saveag">Save</button></div><div class="err" id="eam">'+esc(agMsg)+'</div><p class="notice" style="padding:8px 0 0">Changing the email means the person signs in with the new email address.</p></div>';
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div class="card-title">Edit employee</div><div style="display:flex;flex-direction:column;gap:8px"><label class="lbl">Name</label><input type="text" id="ean" value="'+esc(a.name)+'" /><label class="lbl">Work email</label><input type="email" id="eae" value="'+esc(a.email||'')+'" /><label class="lbl">Time zone</label>'+tzSelect('eaz',a.timezone||'EST')+teamPick+'<button class="btn btn-primary" id="b-saveag">Save</button></div><div class="err" id="eam">'+esc(agMsg)+'</div><p class="notice" style="padding:8px 0 0">Changing the email means the person signs in with the new email address.</p></div>';
 }
 
+/* ----- admin ----- */
+function roleText(m){
+  if(m.role==='admin')return 'Org Admin · all teams';
+  if(m.role==='hr')return 'HR · all teams, view only';
+  return 'Manager · '+(teamName(m.team_id)||'Team '+m.team_id);
+}
 function rAdmin(){
-  const mt=teams.map(t=>{const n=agents.filter(a=>a.team_id===t.id&&a.active).length;return '<div class="row-item"><div style="flex:1;font-weight:500">'+esc(t.name)+'</div><div style="font-size:12px;color:var(--muted)">'+n+' active</div></div>';}).join('')||'<p class="notice">No teams.</p>';
+  const tl=teams.map(t=>{const n=agents.filter(a=>a.team_id===t.id&&a.active).length;return '<div class="row-item"><div style="flex:1;font-weight:500">'+esc(t.name)+'</div><div style="font-size:12px;color:var(--muted)">'+n+' active</div></div>';}).join('')||'<p class="notice">No teams.</p>';
   const mg=managers.map(m=>{
-    const scope=m.team_id==null?'All teams (admin)':(teamName(m.team_id)||'Team '+m.team_id);
     const self=m.user_id&&session&&m.user_id===session.user.id;
-    return '<div class="row-item"><div style="flex:1;min-width:0"><div style="font-weight:500;word-break:break-all">'+esc(m.email)+'</div><div style="font-size:11px;color:var(--muted)">'+esc(m.role==='admin'?'Admin':'Manager')+' · '+esc(scope)+(m.user_id?'':' · hasn\'t signed in yet')+'</div></div>'+(self?'':'<button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-rmmgr="'+m.id+'">Remove</button>')+'</div>';
+    return '<div class="row-item"><div style="flex:1;min-width:0"><div style="font-weight:500;word-break:break-all">'+esc(m.email)+'</div><div style="font-size:11px;color:var(--muted)">'+esc(roleText(m))+(m.user_id?'':' · hasn\'t signed in yet')+'</div></div>'+(self?'':'<button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-rmmgr="'+m.id+'">Remove</button>')+'</div>';
   }).join('')||'<p class="notice">No managers.</p>';
-  const scopeOpts='<option value="all">All teams (admin)</option>'+teams.map(t=>'<option value="'+t.id+'">'+esc(t.name)+' (manager)</option>').join('');
-  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Teams</div>'+mt+'<div style="display:flex;gap:8px;margin-top:12px"><input type="text" id="ntn" placeholder="New team name" /><button class="btn btn-primary" id="b-addteam">Add</button></div></div><div class="card"><div class="card-title">Managers and admins</div>'+mg+'<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px"><input type="email" id="nme" placeholder="Work email" /><select id="nms">'+scopeOpts+'</select><button class="btn btn-primary" id="b-addmgr">Add manager / admin</button></div></div><div class="err" id="adm">'+esc(adminMsg)+'</div>';
+  const scopeOpts='<option value="admin">Org Admin — everything, all teams</option><option value="hr">HR — view all, change nothing</option>'+teams.map(t=>'<option value="'+t.id+'">Manager — '+esc(t.name)+'</option>').join('');
+  const yr=new Date().getFullYear();
+  const yrOpts=[yr,yr+1].map(y=>'<option value="'+y+'">'+y+'</option>').join('');
+  const hol=holidays.length?holidays.map(h=>'<div class="row-item"><div style="flex:1"><span style="font-weight:500">'+esc(h.name)+'</span><div style="font-size:11px;color:var(--muted)">'+esc(h.date)+' · '+esc(h.hours)+'h</div></div><button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-rmhol="'+h.id+'">Remove</button></div>').join(''):'<p class="notice">No holidays yet.</p>';
+  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Teams</div>'+tl+'<div style="display:flex;gap:8px;margin-top:12px"><input type="text" id="ntn" placeholder="New team name" /><button class="btn btn-primary" id="b-addteam">Add</button></div></div>'
+  +'<div class="card" style="margin-bottom:12px"><div class="card-title">Managers, HR and admins</div>'+mg+'<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px"><input type="email" id="nme" placeholder="Work email" /><select id="nms">'+scopeOpts+'</select><button class="btn btn-primary" id="b-addmgr">Add person</button></div><div class="err" id="adm">'+esc(adminMsg)+'</div></div>'
+  +'<div class="card" style="margin-bottom:12px"><div class="card-title">Company holidays</div><p class="notice" style="text-align:left;padding:0 0 8px">One holiday per line: <b>date, name, hours</b> (hours optional, default 8). Importing adds the time off to every active employee automatically, and to anyone hired later.</p><textarea id="hol-txt" rows="7" placeholder="2026-12-25, Christmas Day, 8">'+esc(holTxt)+'</textarea><div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;align-items:center"><select id="hol-year" style="width:auto">'+yrOpts+'</select><button class="btn btn-sm" id="b-hsug">Suggest US holidays</button><label class="btn btn-sm" for="hol-file" style="cursor:pointer">Upload CSV</label><input type="file" id="hol-file" accept=".csv,.txt" style="display:none"></div><label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px;cursor:pointer"><input type="checkbox" id="hol-past" style="width:auto"'+(holPast?' checked':'')+'> Also add holidays that have already passed</label><button class="btn btn-primary btn-full" id="b-himport">Import holidays</button><div class="'+(holOk?'ok':'err')+'" id="hol-msg">'+esc(holMsg)+'</div><div style="margin-top:8px">'+hol+'</div></div>'
+  +'<div class="card"><div class="card-title">Backup</div><p class="notice" style="text-align:left;padding:0 0 10px">Downloads everything (employees, punches, time off, teams, holidays) as one file. Store it somewhere private — it contains employee emails and hours.</p><button class="btn btn-full" id="b-backup">Download backup</button><div class="ok" id="bk-msg">'+esc(backupMsg)+'</div></div>';
 }
 
+/* ----- punches / time off views ----- */
 function rEditPunches(){
-  const a=editAgent,c=clr(a.id);
+  const a=editAgent,c=clr(a.id),ro=!canEditAgent(a);
   const LB={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch Out',lunch_in:'Lunch In'};
   const typeOpts=sel=>['shift_in','lunch_out','lunch_in','shift_out'].map(v=>'<option value="'+v+'"'+(v===sel?' selected':'')+'>'+LB[v]+'</option>').join('');
-  const rows=editPunches.slice(0,40).map(p=>{
-    if(editingPunchId===p.id){
+  const rows=editPunches.map(p=>{
+    if(!ro&&editingPunchId===p.id){
       return '<div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px"><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:500;font-size:13px">'+LB[p.type]+'</span><span style="font-size:11px;color:var(--muted)">editing</span></div><select id="ep-type">'+typeOpts(p.type)+'</select><input type="datetime-local" id="ep-dt" value="'+toLDT(p.punched_at)+'" /><div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" style="flex:1" data-sp="'+p.id+'">Save</button><button class="btn btn-sm" style="flex:1" data-cep="1">Cancel</button><button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-dp="'+p.id+'">Delete</button></div></div>';
     }
-    return '<div class="row-item" style="cursor:pointer" data-ep="'+p.id+'"><div style="flex:1"><div style="font-weight:500">'+LB[p.type]+'</div><div style="font-size:11px;color:var(--muted)">'+fmtD(p.punched_at)+' · '+fmtT(p.punched_at)+'</div></div><span style="font-size:11px;color:var(--accent);font-weight:500;padding:4px 8px">Edit</span></div>';
-  }).join('')||'<p class="notice">No punches this week.</p>';
-  const{start,end}=getWeekRange(wkOffset);
-  const fmt=d=>d.toLocaleDateString([],{month:'short',day:'numeric'});
-  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="font-size:16px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div></div><div class="card-title">Add a punch</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"><select id="apt">'+typeOpts('shift_in')+'</select><input type="datetime-local" id="apdt" value="'+toLDT(new Date())+'" /><button class="btn btn-primary" id="b-ap">Add punch</button></div><div class="ok" id="em">'+esc(editMsg)+'</div></div><div class="card"><div class="card-title">Punches '+fmt(start)+' – '+fmt(end)+' — tap to edit</div>'+rows+'</div>';
+    return '<div class="row-item"'+(ro?'':' style="cursor:pointer" data-ep="'+p.id+'"')+'><div style="flex:1"><div style="font-weight:500">'+LB[p.type]+'</div><div style="font-size:11px;color:var(--muted)">'+fmtD(p.punched_at)+' · '+fmtT(p.punched_at)+'</div></div>'+(ro?'':'<span style="font-size:11px;color:var(--accent);font-weight:500;padding:4px 8px">Edit</span>')+'</div>';
+  }).join('')||'<p class="notice">No punches.</p>';
+  const addForm=ro?'':'<div class="card-title">Add a punch</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"><select id="apt">'+typeOpts('shift_in')+'</select><input type="datetime-local" id="apdt" value="'+toLDT(new Date())+'" /><button class="btn btn-primary" id="b-ap">Add punch</button></div><div class="ok" id="em">'+esc(editMsg)+'</div>';
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:'+(ro?'0':'1rem')+'"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="font-size:16px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div></div>'+addForm+'</div><div class="card"><div class="card-title">Recent punches'+(ro?'':' — tap to edit')+'</div>'+rows+(editPunches.length>=editLimit?'<button class="btn btn-sm btn-full" id="b-more" style="margin-top:10px">Show earlier punches</button>':'')+'</div>';
 }
 function rTimeOff(){
-  const a=toAgent,c=clr(a.id);
-  const rows=toList.slice(0,30).map(t=>'<div class="row-item"><div style="flex:1"><span class="badge '+(TOBADGE[t.type]||'badge-out')+'" style="margin-right:6px">'+esc(TOLAB[t.type]||t.type)+'</span><span style="font-weight:500">'+esc(t.date)+'</span>'+(t.note?' <span style="color:var(--muted);font-size:12px">· '+esc(t.note)+'</span>':'')+'</div><div style="font-size:13px;font-weight:500;margin-right:8px">'+esc(t.hours)+'h</div><button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-dto="'+t.id+'">Delete</button></div>').join('')||'<p class="notice">No time off recorded.</p>';
-  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="font-size:16px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div></div><div class="card-title">Add time off</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"><select id="tot"><option value="pto">PTO</option><option value="sick">Sick Day</option><option value="holiday">Company Holiday</option></select><input type="date" id="tod" value="'+todayStr()+'" /><input type="number" id="toh" placeholder="Hours (e.g. 8)" min="1" max="24" value="8" /><input type="text" id="ton" placeholder="Note (optional)" /><button class="btn btn-primary" id="b-ato">Add time off</button></div><div class="ok" id="tom">'+esc(toMsg)+'</div></div><div class="card"><div class="card-title">Time off history</div>'+rows+'</div>';
+  const a=toAgent,c=clr(a.id),ro=!canEditAgent(a);
+  const rows=toList.slice(0,30).map(t=>'<div class="row-item"><div style="flex:1"><span class="badge '+(TOBADGE[t.type]||'badge-out')+'" style="margin-right:6px">'+esc(TOLAB[t.type]||t.type)+'</span><span style="font-weight:500">'+esc(t.date)+'</span>'+(t.note?' <span style="color:var(--muted);font-size:12px">· '+esc(t.note)+'</span>':'')+'</div><div style="font-size:13px;font-weight:500;margin-right:8px">'+esc(t.hours)+'h</div>'+(ro?'':'<button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-dto="'+t.id+'">Delete</button>')+'</div>').join('')||'<p class="notice">No time off recorded.</p>';
+  const form=ro?'':'<div class="card-title">Add time off</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"><select id="tot"><option value="pto">PTO</option><option value="sick">Sick Day</option><option value="holiday">Company Holiday</option></select><input type="date" id="tod" value="'+todayStr()+'" /><input type="number" id="toh" placeholder="Hours (e.g. 8)" min="1" max="24" value="8" /><input type="text" id="ton" placeholder="Note (optional)" /><button class="btn btn-primary" id="b-ato">Add time off</button></div><div class="ok" id="tom">'+esc(toMsg)+'</div>';
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:'+(ro?'0':'1rem')+'"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="font-size:16px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div></div>'+form+'</div><div class="card"><div class="card-title">Time off history</div>'+rows+'</div>';
+}
+
+/* ---------- holidays ---------- */
+function nthWeekday(y,m,wd,n){
+  if(n>0){const d=new Date(y,m,1);const off=(wd-d.getDay()+7)%7;return new Date(y,m,1+off+(n-1)*7);}
+  const d=new Date(y,m+1,0);const off=(d.getDay()-wd+7)%7;return new Date(y,m,d.getDate()-off);
+}
+function observed(d){const w=d.getDay();if(w===6)return new Date(d.getFullYear(),d.getMonth(),d.getDate()-1);if(w===0)return new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);return d;}
+function suggestHolidays(y){
+  const tg=nthWeekday(y,10,4,4);
+  const L=[["New Year's Day",observed(new Date(y,0,1))],['Martin Luther King Jr. Day',nthWeekday(y,0,1,3)],["Presidents' Day",nthWeekday(y,1,1,3)],['Memorial Day',nthWeekday(y,4,1,-1)],['Juneteenth',observed(new Date(y,5,19))],['Independence Day',observed(new Date(y,6,4))],['Labor Day',nthWeekday(y,8,1,1)],['Thanksgiving Day',tg],['Day After Thanksgiving',new Date(tg.getFullYear(),tg.getMonth(),tg.getDate()+1)],['Christmas Day',observed(new Date(y,11,25))]];
+  return L.map(([n,d])=>ymd(d)+', '+n+', 8').join('\n');
+}
+function parseHolidayLines(txt){
+  const rows=[],bad=[];
+  txt.split(/\r?\n/).forEach((raw,i)=>{
+    const line=raw.trim();if(!line)return;
+    const k=line.indexOf(',');
+    if(k<0){bad.push(i+1);return;}
+    const ds=line.slice(0,k).trim().replace(/^"|"$/g,''),rest=line.slice(k+1).trim();
+    let iso=null,m=ds.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if(m)iso=m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+    else{m=ds.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)iso=m[3]+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');}
+    if(!iso||isNaN(Date.parse(iso+'T12:00:00Z'))){if(i===0&&/date/i.test(ds))return;bad.push(i+1);return;}
+    let name=rest,hours=8;const lm=rest.match(/^(.*),\s*(\d+(?:\.\d+)?)\s*$/);
+    if(lm){name=lm[1];hours=Number(lm[2]);}
+    name=name.trim().replace(/^"|"$/g,'').trim();
+    if(!name||!(hours>0&&hours<=24)){bad.push(i+1);return;}
+    rows.push({date:iso,name,hours});
+  });
+  return{rows,bad};
+}
+
+/* ---------- backup ---------- */
+async function downloadBackup(){
+  const spec=[['teams','*'],['team_members','*'],['agents','id,name,email,timezone,team_id,active,deactivated_at,user_id'],['punches','*'],['time_off','*'],['holidays','*']];
+  const out={exported_at:new Date().toISOString(),exported_by:session.user.email,tables:{}},counts=[];
+  for(const[name,cols]of spec){
+    out.tables[name]=await fetchAll((f,t)=>sb.from(name).select(cols).order('id').range(f,t));
+    counts.push(name+': '+out.tables[name].length);
+  }
+  const blob=new Blob([JSON.stringify(out,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='nymbl_timeclock_backup_'+todayStr()+'.json';document.body.appendChild(a);a.click();a.remove();
+  return counts.join(' · ');
 }
 
 /* ---------- events ---------- */
 const val=id=>{const el=document.getElementById(id);return el?el.value:'';};
-document.getElementById('app').addEventListener('change',async e=>{
-  if(e.target.id==='tf'){teamFilter=e.target.value==='all'?'all':Number(e.target.value);render();}
-  if(e.target.id==='show-inact'){showInactive=e.target.checked;render();}
+const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+async function openPunches(a,back){
+  editAgent=a;editLimit=60;editPunches=await getPunches(a.id,null,null,editLimit);editMsg='';editingPunchId=null;backTab=back||tab;view='edit-punches';
+}
+async function refreshEdit(){editPunches=await getPunches(editAgent.id,null,null,editLimit);}
+const appEl=document.getElementById('app');
+appEl.addEventListener('change',async e=>{
+  const t=e.target;
+  if(t.id==='tf'){teamFilter=t.value==='all'?'all':Number(t.value);render();}
+  if(t.id==='show-inact'){showInactive=t.checked;render();}
+  if(t.id==='hol-past'){holPast=t.checked;}
+  if(t.id==='hol-file'&&t.files&&t.files[0]){
+    const txt=await t.files[0].text();
+    holTxt=txt;holMsg='File loaded — check the list, then click Import.';holOk=true;render();
+  }
 });
-document.getElementById('app').addEventListener('click',async e=>{
+appEl.addEventListener('input',e=>{if(e.target.id==='hol-txt')holTxt=e.target.value;});
+appEl.addEventListener('click',async e=>{
   const t=e.target;
   const punchB=t.closest('[data-punch]');
   if(punchB){
@@ -413,34 +602,36 @@ document.getElementById('app').addEventListener('click',async e=>{
   if(tabB){
     tab=tabB.dataset.tab;
     if(tab==='week'){await guard(loadWeek);return;}
-    if(tab==='team'||tab==='agents'||tab==='admin'){await guard(loadMgrData);}
+    if(tab==='team'){await guard(async()=>{await loadMgrData();await loadCurWeek();});}
+    if(tab==='agents'||tab==='admin'){await guard(loadMgrData);}
     if(tab==='me'){await guard(loadMine);}
     render();return;
   }
   const atabB=t.closest('[data-atab]');
   if(atabB){myTab=atabB.dataset.atab;await guard(loadMine);render();return;}
+  const fixB=t.closest('[data-fix]');
+  if(fixB){await guard(()=>openPunches(agents.find(x=>x.id===Number(fixB.dataset.fix)),'team'));render();return;}
   const deB=t.closest('[data-deact]');
   if(deB){
     const a=agents.find(x=>x.id===Number(deB.dataset.deact));
     const on=statusOf(latest[a.id])!=='out';
-    const msg='Deactivate '+a.name+'?\n\nThey will no longer be able to sign in or punch. Their history is kept and still appears in reports.'+(on?'\n\nNOTE: they are currently clocked in. You may want to add a punch-out for them first.':'');
-    if(!confirm(msg))return;
+    if(!confirm('Deactivate '+a.name+'?\n\nThey will no longer be able to sign in or punch. Their history is kept and still appears in reports.'+(on?'\n\nNOTE: they are currently clocked in. You may want to add a punch-out for them first.':'')))return;
     await guard(async()=>{await must(sb.from('agents').update({active:false}).eq('id',a.id));await loadMgrData();});
     render();return;
   }
   const reB=t.closest('[data-react]');
   if(reB){await guard(async()=>{await must(sb.from('agents').update({active:true}).eq('id',Number(reB.dataset.react)));await loadMgrData();});render();return;}
-  const edagB=t.closest('[data-edag]');
-  if(edagB){agEditing=agents.find(x=>x.id===Number(edagB.dataset.edag));agMsg='';view='edit-agent';render();return;}
-  const epB=t.closest('[data-epb]');
-  if(epB){
-    await guard(async()=>{
-      const{start,end}=getWeekRange(wkOffset);
-      editAgent=agents.find(a=>a.id===Number(epB.dataset.epb));
-      editPunches=await getPunches(editAgent.id,start,end);editMsg='';editingPunchId=null;view='edit-punches';
-    });
+  const dgB=t.closest('[data-delag]');
+  if(dgB){
+    const a=agents.find(x=>x.id===Number(dgB.dataset.delag));
+    if(!confirm('Permanently delete '+a.name+'?\n\nThis is only for people added by mistake. It cannot be undone. (Anyone who has clocked in cannot be deleted — deactivate them instead.)'))return;
+    await guard(async()=>{await must(sb.rpc('delete_employee',{p_id:a.id}));await loadMgrData();});
     render();return;
   }
+  const edagB=t.closest('[data-edag]');
+  if(edagB){agEditing=agents.find(x=>x.id===Number(edagB.dataset.edag));agMsg='';backTab='agents';view='edit-agent';render();return;}
+  const epB=t.closest('[data-epb]');
+  if(epB){await guard(()=>openPunches(agents.find(a=>a.id===Number(epB.dataset.epb)),'agents'));render();return;}
   const epRow=t.closest('[data-ep]');
   if(epRow){editingPunchId=Number(epRow.dataset.ep);editMsg='';render();return;}
   if(t.closest('[data-cep]')){editingPunchId=null;render();return;}
@@ -448,23 +639,17 @@ document.getElementById('app').addEventListener('click',async e=>{
   if(spB){
     const v=val('ep-dt'),type=val('ep-type');
     if(!v){editMsg='Pick a time.';render();return;}
-    try{
-      await must(sb.from('punches').update({punched_at:new Date(v).toISOString(),type}).eq('id',Number(spB.dataset.sp)));
-      const{start,end}=getWeekRange(wkOffset);editPunches=await getPunches(editAgent.id,start,end);editingPunchId=null;editMsg='Saved!';
-    }catch(ex){editMsg='Error: '+errMsg(ex);}
+    try{await must(sb.from('punches').update({punched_at:new Date(v).toISOString(),type}).eq('id',Number(spB.dataset.sp)));await refreshEdit();editingPunchId=null;editMsg='Saved!';}catch(ex){editMsg='Error: '+errMsg(ex);}
     render();return;
   }
   const dpB=t.closest('[data-dp]');
   if(dpB){
     if(!confirm('Delete this punch?'))return;
-    await guard(async()=>{await must(sb.from('punches').delete().eq('id',Number(dpB.dataset.dp)));const{start,end}=getWeekRange(wkOffset);editPunches=await getPunches(editAgent.id,start,end);editingPunchId=null;editMsg='Deleted.';});
+    await guard(async()=>{await must(sb.from('punches').delete().eq('id',Number(dpB.dataset.dp)));await refreshEdit();editingPunchId=null;editMsg='Deleted.';});
     render();return;
   }
   const toB=t.closest('[data-tob]');
-  if(toB){
-    await guard(async()=>{toAgent=agents.find(a=>a.id===Number(toB.dataset.tob));toList=(await getTO(toAgent.id))||[];toMsg='';view='time-off';});
-    render();return;
-  }
+  if(toB){await guard(async()=>{toAgent=agents.find(a=>a.id===Number(toB.dataset.tob));toList=(await getTO(toAgent.id))||[];toMsg='';backTab='agents';view='time-off';});render();return;}
   const dtoB=t.closest('[data-dto]');
   if(dtoB){
     if(!confirm('Delete this entry?'))return;
@@ -474,8 +659,15 @@ document.getElementById('app').addEventListener('click',async e=>{
   const rmB=t.closest('[data-rmmgr]');
   if(rmB){
     const m=managers.find(x=>x.id===Number(rmB.dataset.rmmgr));
-    if(!confirm('Remove '+m.email+' as '+m.role+'?'))return;
+    if(!confirm('Remove '+m.email+' ('+roleText(m)+')?'))return;
     await guard(async()=>{await must(sb.from('team_members').delete().eq('id',m.id));await loadMgrData();adminMsg='';});
+    render();return;
+  }
+  const rhB=t.closest('[data-rmhol]');
+  if(rhB){
+    const h=holidays.find(x=>x.id===Number(rhB.dataset.rmhol));
+    if(!confirm('Remove '+h.name+' ('+h.date+')?\n\nThis also removes the holiday time off it added for employees.'))return;
+    await guard(async()=>{await must(sb.rpc('remove_holiday',{p_id:h.id}));await loadMgrData();holMsg='Removed.';holOk=true;});
     render();return;
   }
   const bid=t.id||(t.closest('button')&&t.closest('button').id);
@@ -486,16 +678,22 @@ document.getElementById('app').addEventListener('click',async e=>{
   }
   else if(bid==='b-logout'){await sb.auth.signOut();session=null;resetState();loginErr='';view='login';render();}
   else if(bid==='b-retry'){await enter();}
-  else if(bid==='b-back'){view='main';tab='agents';render();}
+  else if(bid==='b-back'){
+    view='main';tab=backTab||'agents';
+    if(tab==='team')await guard(async()=>{await loadMgrData();await loadCurWeek();});
+    render();
+  }
+  else if(bid==='b-more'){editLimit+=60;await guard(refreshEdit);render();}
   else if(bid==='b-wp'){wkOffset--;await loadWeek();}
   else if(bid==='b-wn'){if(wkOffset<0){wkOffset++;await loadWeek();}}
   else if(bid==='b-export'){exportCSV();}
+  else if(bid==='b-print'){printReport();}
   else if(bid==='b-add'){
     const name=val('nn').trim(),email=val('ne').trim().toLowerCase(),tz=val('ntz');
     const mt=manageable();
     const team_id=document.getElementById('nt')?Number(val('nt')):(teamFilter!=='all'&&mt.find(x=>x.id===teamFilter)?teamFilter:(mt[0]&&mt[0].id));
     if(!name){agMsg='Enter a name.';render();return;}
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){agMsg='Enter a valid work email.';render();return;}
+    if(!validEmail(email)){agMsg='Enter a valid work email.';render();return;}
     if(!team_id){agMsg='No team available to add to.';render();return;}
     try{await must(sb.from('agents').insert({name,email,timezone:tz,team_id}));agMsg='';await loadMgrData();}catch(ex){agMsg=errMsg(ex);}
     render();
@@ -505,17 +703,14 @@ document.getElementById('app').addEventListener('click',async e=>{
     const upd={name,email:email||null,timezone:tz};
     if(document.getElementById('eat'))upd.team_id=Number(val('eat'));
     if(!name){agMsg='Enter a name.';render();return;}
-    if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){agMsg='Enter a valid email.';render();return;}
+    if(email&&!validEmail(email)){agMsg='Enter a valid email.';render();return;}
     try{await must(sb.from('agents').update(upd).eq('id',agEditing.id));await loadMgrData();agMsg='';view='main';tab='agents';}catch(ex){agMsg=errMsg(ex);}
     render();
   }
   else if(bid==='b-ap'){
     const type=val('apt'),v=val('apdt');
     if(!v){editMsg='Pick a time.';render();return;}
-    try{
-      await must(sb.from('punches').insert({agent_id:editAgent.id,team_id:editAgent.team_id,type,punched_at:new Date(v).toISOString()}));
-      const{start,end}=getWeekRange(wkOffset);editPunches=await getPunches(editAgent.id,start,end);editMsg='Added!';
-    }catch(ex){editMsg='Error: '+errMsg(ex);}
+    try{await must(sb.from('punches').insert({agent_id:editAgent.id,team_id:editAgent.team_id,type,punched_at:new Date(v).toISOString()}));await refreshEdit();editMsg='Added!';}catch(ex){editMsg='Error: '+errMsg(ex);}
     render();
   }
   else if(bid==='b-ato'){
@@ -532,14 +727,32 @@ document.getElementById('app').addEventListener('click',async e=>{
   }
   else if(bid==='b-addmgr'){
     const email=val('nme').trim().toLowerCase(),scope=val('nms');
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){adminMsg='Enter a valid work email.';render();return;}
-    const row=scope==='all'?{email,role:'admin',team_id:null}:{email,role:'manager',team_id:Number(scope)};
+    if(!validEmail(email)){adminMsg='Enter a valid work email.';render();return;}
+    const row=scope==='admin'?{email,role:'admin',team_id:null}:scope==='hr'?{email,role:'hr',team_id:null}:{email,role:'manager',team_id:Number(scope)};
     try{await must(sb.from('team_members').insert(row));await loadMgrData();adminMsg='';}catch(ex){adminMsg=errMsg(ex);}
+    render();
+  }
+  else if(bid==='b-hsug'){holTxt=suggestHolidays(Number(val('hol-year')));holMsg='Suggested list loaded — edit it to match your company, then click Import.';holOk=true;render();}
+  else if(bid==='b-himport'){
+    holTxt=val('hol-txt');
+    const{rows,bad}=parseHolidayLines(holTxt);
+    if(bad.length){holMsg='Check line'+(bad.length>1?'s':'')+' '+bad.join(', ')+' — use: 2026-12-25, Christmas Day, 8';holOk=false;render();return;}
+    if(!rows.length){holMsg='Nothing to import yet.';holOk=false;render();return;}
+    if(!confirm('Import '+rows.length+' holiday'+(rows.length>1?'s':'')+' and add the time off to every active employee?'))return;
+    try{
+      const r=await must(sb.rpc('import_holidays',{p_rows:rows,p_include_past:holPast}));
+      holMsg='Done: '+r.holidays+' holiday'+(r.holidays===1?'':'s')+' saved, '+r.timeoff_added+' time-off entries added.';holOk=true;holTxt='';await loadMgrData();
+    }catch(ex){holMsg=errMsg(ex);holOk=false;}
+    render();
+  }
+  else if(bid==='b-backup'){
+    backupMsg='Preparing…';render();
+    try{backupMsg='Downloaded. '+await downloadBackup();}catch(ex){backupMsg='Error: '+errMsg(ex);}
     render();
   }
 });
 
-/* ---------- CSV export for HR (same layout as the original timeclock) ---------- */
+/* ---------- CSV export for payroll (same layout as the original timeclock) ---------- */
 function exportCSV(){
   const{start,end}=getWeekRange(wkOffset);
   const wk=start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
@@ -550,17 +763,14 @@ function exportCSV(){
   wTO.forEach(x=>{if(grouped[x.agent_id])grouped[x.agent_id].to.push(x);});
   const msToHrs=ms=>Math.round(ms/36000)/100;
   const fmt2=n=>n>0?n.toFixed(2):'';
-  const TZ_IANA={EST:'America/New_York',CST:'America/Chicago',MST:'America/Denver',PST:'America/Los_Angeles',AKST:'America/Anchorage',HST:'Pacific/Honolulu'};
   const agentFmt=(tz,ts,opts)=>new Intl.DateTimeFormat('en-US',{timeZone:TZ_IANA[tz]||'UTC',...opts}).format(new Date(ts));
   const PUNCH_LABEL={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch Out',lunch_in:'Lunch In'};
   // quote a cell; neutralise leading = + - @ so spreadsheets never run typed text as a formula
   const q=s=>{s=String(s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
-
   let csv='Nymbl Timeclock Report\n';
   csv+='"Week: '+weekLabel+'"\n';
   csv+='\n';
   csv+='Agent,Timezone,Date,Punch Type,Time,Hours Worked,Time Off Type,Time Off Hours,Note,Grand Total\n';
-
   Object.values(grouped).forEach(g=>{
     if(!g.events.length&&!g.to.length)return;
     let workedHrsWeek=0,toHrsWeek=0;
@@ -571,9 +781,8 @@ function exportCSV(){
     g.to.forEach(x=>{const day=x.date;if(!byDay[day])byDay[day]={punches:[],to:[]};byDay[day].to.push(x);});
     csv+=q(g.name)+',"'+g.tz+'","","","","","","","",""\n';
     Object.entries(byDay).sort().forEach(([day,data])=>{
-      const dayLabel=new Date(day+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric',year:'2-digit'});
+      const dl=new Date(day+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric',year:'2-digit'});
       const sorted=[...data.punches].sort((a,b)=>new Date(a.punched_at)-new Date(b.punched_at));
-      // Punch times are only shown to the minute, so hours are computed on whole minutes too.
       let dayMs=0,lastIn=null,lastBreakOut=null,breakMs=0;
       sorted.forEach(p=>{
         const tm=toMinute(p.punched_at);
@@ -588,15 +797,14 @@ function exportCSV(){
       const dayToHrs=data.to.reduce((s,x)=>s+Number(x.hours),0);
       toHrsWeek+=dayToHrs;
       const toNotes=data.to.map(x=>x.note).filter(Boolean).join(', ');
-      sorted.forEach(p=>{csv+=',"",'+q(dayLabel)+','+q(PUNCH_LABEL[p.type]||p.type)+','+q(fmtTime(p.punched_at))+',"","","","",""\n';});
-      if(sorted.length===0&&data.to.length){csv+=',"",'+q(dayLabel)+',"","","",'+q(toLabels)+','+q(dayToHrs>0?dayToHrs.toFixed(2):'')+','+q(toNotes)+',""\n';}
+      sorted.forEach(p=>{csv+=',"",'+q(dl)+','+q(PUNCH_LABEL[p.type]||p.type)+','+q(fmtTime(p.punched_at))+',"","","","",""\n';});
+      if(sorted.length===0&&data.to.length){csv+=',"",'+q(dl)+',"","","",'+q(toLabels)+','+q(dayToHrs>0?dayToHrs.toFixed(2):'')+','+q(toNotes)+',""\n';}
       csv+=',"","Daily Total","","",'+q(fmt2(dayWorkedHrs))+','+q(toLabels)+','+q(dayToHrs>0?dayToHrs.toFixed(2):'')+','+q(toNotes)+',""\n';
     });
     const grandTotal=workedHrsWeek+toHrsWeek;
     csv+=',"","WEEK TOTAL","","",'+q(fmt2(workedHrsWeek))+',"",'+q(toHrsWeek>0?toHrsWeek.toFixed(2):'')+',"",'+q(fmt2(grandTotal))+'\n';
     csv+='\n';
   });
-
   const tn=teamFilter!=='all'?'_'+teamName(teamFilter).replace(/[^a-z0-9]+/gi,'_'):'';
   const link=document.createElement('a');
   link.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\ufeff'+csv);
@@ -604,11 +812,89 @@ function exportCSV(){
   link.click();
 }
 
-/* ---------- clock ---------- */
+/* ---------- polished printable report ---------- */
+function printReport(){
+  const R=buildReport();
+  const fmtShort=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const range=fmtShort(R.start)+' – '+R.end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const scope=teamFilter==='all'?(teams.length>1?'All teams':(teams[0]?teams[0].name:'')):teamName(teamFilter);
+  const gen=new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+  const logo=(document.querySelector('.logo-wrap img')||{}).src||'';
+  let totW=0,totT=0,flagN=0;
+  R.rows.forEach(r=>{totW+=r.workedMs;totT+=r.toH;flagN+=r.issues.length;});
+  const issues=[];R.rows.forEach(r=>r.issues.forEach(i=>issues.push({r,i})));
+  // summary rows
+  const sumRows=R.rows.map(r=>{
+    const f=r.issues.some(i=>i.kind!=='open'),m=r.issues.some(i=>i.kind==='open');
+    return '<tr><td><b>'+esc(r.a.name)+'</b>'+(r.a.active?'':' <span class="tag">inactive</span>')+'</td><td>'+esc(teamName(r.a.team_id))+'</td><td class="n">'+hrs2(r.workedMs)+'</td><td class="n">'+(r.toBy.pto||'–')+'</td><td class="n">'+(r.toBy.sick||'–')+'</td><td class="n">'+(r.toBy.holiday||'–')+'</td><td class="n"><b>'+(Number(hrs2(r.workedMs))+r.toH).toFixed(2)+'</b></td><td>'+(f?'<span class="pill red">Overtime</span> ':'')+(m?'<span class="pill amber">Missing punch</span>':'')+'</td></tr>';
+  }).join('');
+  const sumTotals='<tr class="tot"><td colspan="2">Total</td><td class="n">'+hrs2(totW)+'</td><td class="n" colspan="3">'+totT.toFixed(2)+' off</td><td class="n">'+(Number(hrs2(totW))+totT).toFixed(2)+'</td><td></td></tr>';
+  // team summary
+  let teamTbl='';
+  if(teams.length>1){
+    const g={};R.rows.forEach(r=>{const n=teamName(r.a.team_id)||'—';const o=g[n]=g[n]||{n:0,w:0,t:0,f:0};o.n++;o.w+=r.workedMs;o.t+=r.toH;o.f+=r.issues.length;});
+    const names=Object.keys(g).sort();
+    if(names.length>1)teamTbl='<h2>By team</h2><table><thead><tr><th>Team</th><th class="n">Employees</th><th class="n">Worked</th><th class="n">Time off</th><th class="n">Flags</th></tr></thead><tbody>'+names.map(n=>'<tr><td><b>'+esc(n)+'</b></td><td class="n">'+g[n].n+'</td><td class="n">'+hrs2(g[n].w)+'</td><td class="n">'+g[n].t.toFixed(2)+'</td><td class="n">'+(g[n].f||'–')+'</td></tr>').join('')+'</tbody></table>';
+  }
+  const excTbl=issues.length?'<h2>Needs attention</h2><table><thead><tr><th>Employee</th><th>Team</th><th>Issue</th></tr></thead><tbody>'+issues.map(({r,i})=>'<tr><td><b>'+esc(r.a.name)+'</b></td><td>'+esc(teamName(r.a.team_id))+'</td><td><span class="pill '+(i.kind==='open'?'amber':'red')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span> '+esc(i.text)+'</td></tr>').join('')+'</tbody></table>':'';
+  // detail
+  const detail=R.rows.map(r=>{
+    const iana=tzOf(r.a);
+    const byDay={};
+    r.ps.forEach(p=>{const d=dayKey(p.punched_at,iana);(byDay[d]=byDay[d]||{ps:[],to:[]}).ps.push(p);});
+    r.to.forEach(t=>{const d=String(t.date);(byDay[d]=byDay[d]||{ps:[],to:[]}).to.push(t);});
+    const rows=Object.keys(byDay).sort().map(d=>{
+      const o=byDay[d],ms=r.c.byDay[d]||0,over=ms>DAILY_LIMIT*HOUR;
+      const parts=[];
+      for(let k=0;k<o.ps.length;k++){const p=o.ps[k],tm=fmtTz(p.punched_at,iana);
+        if(p.type==='shift_in')parts.push('In '+tm);
+        else if(p.type==='shift_out')parts.push('Out '+tm);
+        else if(p.type==='lunch_out'){const n=o.ps[k+1];if(n&&n.type==='lunch_in'){parts.push('Lunch '+tm+' – '+fmtTz(n.punched_at,iana));k++;}else parts.push('Lunch out '+tm);}
+        else parts.push('Lunch in '+tm);}
+      const toTxt=o.to.map(t=>(TOLAB[t.type]||t.type)+' '+t.hours+'h'+(t.note?' ('+esc(t.note)+')':'')).join(', ');
+      return '<tr><td class="day">'+esc(dayLabel(d))+'</td><td>'+(parts.length?esc(parts.join('  ·  ')):'<span class="muted">—</span>')+'</td><td class="n'+(over?' redtxt':'')+'">'+(o.ps.length?hrs2(ms)+(over?' OT':''):'–')+'</td><td>'+(toTxt||'')+'</td></tr>';
+    }).join('');
+    return '<div class="emp"><div class="emp-h"><div><b>'+esc(r.a.name)+'</b><span class="muted"> · '+esc(teamName(r.a.team_id))+' · '+esc(r.a.timezone||'')+'</span></div><div>Worked <b>'+hrs2(r.workedMs)+'</b>'+(r.toH?' &nbsp;+&nbsp; Off <b>'+r.toH.toFixed(2)+'</b>':'')+'</div></div><table class="dt"><thead><tr><th style="width:62px">Day</th><th>Punches</th><th class="n" style="width:64px">Hours</th><th style="width:130px">Time off</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }).join('');
+  const css=`@page{size:Letter;margin:0.55in 0.55in 0.65in;@bottom-left{content:"Nymbl Timeclock · Confidential";font:8px Inter,Arial,sans-serif;color:#7B6FA8}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:8px Inter,Arial,sans-serif;color:#7B6FA8}}
+*{box-sizing:border-box}body{font-family:Inter,Arial,Helvetica,sans-serif;color:#07051E;font-size:10.5px;line-height:1.4;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fff}
+.bar{position:sticky;top:0;background:#26045E;color:#fff;padding:10px 18px;display:flex;gap:14px;align-items:center;font-size:13px}.bar button{background:#7748FF;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
+.page{max-width:7.4in;margin:0 auto;padding:18px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #7748FF;padding-bottom:10px;margin-bottom:14px}.head img{height:32px}
+.head h1{font-family:Sora,Inter,Arial,sans-serif;font-size:20px;margin:0;color:#26045E;letter-spacing:-0.3px;text-align:right}.head .sub{color:#7B6FA8;font-size:11px;text-align:right;margin-top:2px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px}.kpi{border:1px solid #E2DAFF;border-radius:8px;padding:9px 11px;background:#F8F5FF}.kpi b{display:block;font-family:Sora,Inter,Arial,sans-serif;font-size:19px;color:#26045E}.kpi span{color:#7B6FA8;font-size:9.5px}
+.kpi.warn b{color:#D12B2B}
+h2{font-family:Sora,Inter,Arial,sans-serif;font-size:12.5px;color:#26045E;margin:18px 0 6px;padding-bottom:3px;border-bottom:1px solid #E2DAFF}
+table{width:100%;border-collapse:collapse}th{background:#26045E;color:#fff;text-align:left;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:6px 7px}td{padding:5px 7px;border-bottom:1px solid #EFEBFF;vertical-align:top}
+tbody tr:nth-child(even) td{background:#FAF8FF}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.n{text-align:right}
+tr.tot td{border-top:2px solid #26045E;background:#F0EEFF!important;font-weight:700}thead{display:table-header-group}tr{break-inside:avoid}
+.pill{display:inline-block;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600}.pill.red{background:#FFE3E3;color:#B42318}.pill.amber{background:#FEF0C7;color:#93370D}
+.tag{font-size:8.5px;background:#EEE;color:#666;border-radius:8px;padding:1px 5px}.muted{color:#7B6FA8}.redtxt{color:#B42318;font-weight:700}
+.emp{break-inside:avoid;margin:0 0 12px}.emp-h{display:flex;justify-content:space-between;align-items:baseline;background:#F0EEFF;border-left:4px solid #7748FF;padding:6px 9px;font-size:11px}
+.dt th{background:#EDE8FF;color:#26045E}.day{white-space:nowrap;font-weight:600}
+.sign{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:34px;break-inside:avoid}.sign div{border-top:1px solid #07051E;padding-top:4px;font-size:9.5px;color:#7B6FA8}
+@media print{.bar{display:none}.page{padding:0;max-width:none}}`;
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>Nymbl Timesheet Report — '+esc(range)+'</title><link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"><style>'+css+'</style></head><body><div class="bar"><span>Use <b>Print</b>, then choose <b>Save as PDF</b> to keep a copy.</span><button onclick="window.print()">Print / Save as PDF</button></div><div class="page">'
+  +'<div class="head"><div>'+(logo?'<img src="'+logo+'" alt="Nymbl">':'<b>Nymbl</b>')+'</div><div><h1>Weekly Timesheet Report</h1><div class="sub">'+esc(range)+' &nbsp;·&nbsp; '+esc(scope)+'</div></div></div>'
+  +'<div class="kpis"><div class="kpi"><b>'+R.rows.length+'</b><span>Employees with activity</span></div><div class="kpi"><b>'+hrs2(totW)+'</b><span>Hours worked</span></div><div class="kpi"><b>'+totT.toFixed(2)+'</b><span>Time-off hours</span></div><div class="kpi'+(flagN?' warn':'')+'"><b>'+flagN+'</b><span>Flags (overtime / missing punch)</span></div></div>'
+  +'<div class="muted" style="font-size:9.5px">Generated '+esc(gen)+' by '+esc(session.user.email)+'. Overtime flag: over '+DAILY_LIMIT+' hours in a day or '+WEEKLY_LIMIT+' hours in a week (time off not counted). Overtime requires prior management approval.</div>'
+  +excTbl+teamTbl
+  +'<h2>Employee summary</h2><table><thead><tr><th>Employee</th><th>Team</th><th class="n">Worked</th><th class="n">PTO</th><th class="n">Sick</th><th class="n">Holiday</th><th class="n">Total</th><th>Flags</th></tr></thead><tbody>'+(sumRows||'<tr><td colspan="8" class="muted">No activity this week.</td></tr>')+sumTotals+'</tbody></table>'
+  +'<h2>Daily detail</h2>'+(detail||'<p class="muted">No activity this week.</p>')
+  +'<div class="sign"><div>Manager approval &nbsp;&nbsp;&nbsp;&nbsp; Date</div><div>Payroll / HR review &nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>'
+  +'</div></body></html>';
+  const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+  const w=window.open(url,'_blank');
+  if(!w)alert('Your browser blocked the report window. Allow pop-ups for this site and try again.');
+}
+
+/* ---------- clock + live alerts ---------- */
 function updateClock(){
   const now=new Date(),t=document.getElementById('lt'),d=document.getElementById('ld');
   if(t)t.textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   if(d)d.textContent=now.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+  const ob=document.getElementById('otbanner');
+  if(ob&&me.agent){const h=alertsHtml();if(ob.dataset.h!==h){ob.innerHTML=h;ob.dataset.h=h;}}
 }
 setInterval(updateClock,1000);
 boot();
