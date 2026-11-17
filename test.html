@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>Nymbl Timeclock</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F7F7F7;
+  --surface:#FFFFFF;
+  --surface2:#F0EEFF;
+  --border:#E2DAFF;
+  --text:#07051E;
+  --muted:#7B6FA8;
+  --accent:#7748FF;
+  --accent-dark:#26045E;
+  --accent-light:#EDE8FF;
+  --danger:#FF5959;
+  --danger-light:rgba(255,89,89,0.1);
+  --warn:#F59E0B;
+  --warn-light:rgba(245,158,11,0.1);
+  --radius:14px;
+  --radius-sm:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:#F7F7F7;color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;}
+.container{width:100%;max-width:420px;}
+.logo-wrap{text-align:center;margin-bottom:2rem;padding-top:0.5rem;}
+.logo-wrap img{height:44px;width:auto;}
+.logo-wrap .sub{font-size:11px;color:#7B6FA8;margin-top:6px;letter-spacing:0.08em;text-transform:uppercase;font-family:'Inter',sans-serif;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:12px;}
+.card-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1rem;}
+input,select{width:100%;padding:11px 14px;border:1px solid #E2DAFF;border-radius:var(--radius-sm);font-family:'Inter',sans-serif;font-size:15px;background:#F8F5FF;color:#07051E;outline:none;transition:border-color 0.15s;}
+input:focus,select:focus{border-color:var(--accent);}
+input::placeholder{color:var(--muted);}
+select option{background:var(--surface2);}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 20px;border-radius:var(--radius-sm);font-family:'Inter',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:1px solid #E2DAFF;background:#FFFFFF;color:#07051E;transition:all 0.15s;white-space:nowrap;}
+.btn:hover{background:#F0EEFF;}
+.btn-primary{background:#7748FF;border-color:#7748FF;color:#fff;}
+.btn-primary:hover{background:#26045E;border-color:#26045E;}
+.btn-danger{background:#FF5959;border-color:#FF5959;color:#fff;}
+.btn-danger:hover{opacity:0.88;}
+.btn-full{width:100%;padding:14px;font-size:15px;}
+.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-ghost{border-color:transparent;background:transparent;color:#7B6FA8;}
+.btn-ghost:hover{color:#07051E;background:#F0EEFF;}
+.btn-lunch{background:var(--warn);border-color:var(--warn);color:#fff;}
+.btn-lunch:hover{background:#D97706;border-color:#D97706;}
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;letter-spacing:0.02em;}
+.badge-in{background:#EDE8FF;color:#26045E;}
+.badge-lunch{background:var(--warn-light);color:var(--warn);}
+.badge-out{background:rgba(139,135,176,0.15);color:var(--muted);}
+.badge-pto{background:rgba(56,189,248,0.15);color:#38BDF8;}
+.badge-sick{background:var(--danger-light);color:#FF8080;}
+.badge-holiday{background:rgba(52,211,153,0.15);color:#34D399;}
+.agent-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity 0.12s;}
+.agent-row:last-child{border-bottom:none;}
+.agent-row:hover{opacity:0.7;}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;font-family:'Sora',sans-serif;}
+.pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto;}
+.pinkey{height:58px;font-size:22px;font-family:'Sora',sans-serif;font-weight:600;border:1px solid #E2DAFF;border-radius:var(--radius-sm);background:#FFFFFF;color:#07051E;cursor:pointer;transition:background 0.1s,transform 0.08s;}
+.pinkey:hover{background:#F0EEFF;}
+.pinkey:active{transform:scale(0.94);}
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:1.25rem 0;}
+.pin-dot{width:12px;height:12px;border-radius:50%;border:2px solid #E2DAFF;transition:all 0.15s;}
+.pin-dot.filled{background:#7748FF;border-color:#7748FF;}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem;}
+.stat{background:#F0EEFF;border:1px solid #E2DAFF;border-radius:var(--radius-sm);padding:14px 12px;text-align:center;}
+.stat-val{font-size:24px;font-weight:700;font-family:'Sora',sans-serif;color:var(--text);}
+.stat-label{font-size:10px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:0.07em;}
+.err{color:var(--danger);font-size:13px;text-align:center;min-height:18px;margin-top:8px;}
+.ok{color:#34D399;font-size:13px;text-align:center;min-height:18px;margin-top:8px;}
+.time-display{font-family:'Sora',sans-serif;font-size:42px;font-weight:700;text-align:center;letter-spacing:-1px;margin:0.5rem 0;color:var(--text);}
+.punch-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid var(--border);color:var(--muted);}
+.punch-row:last-child{border-bottom:none;}
+.punch-row span:last-child{color:var(--text);font-family:'Sora',sans-serif;font-size:12px;}
+.week-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #E2DAFF;font-size:13px;flex-wrap:wrap;}
+.week-row:last-child{border-bottom:none;}
+.row-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.row-item:last-child{border-bottom:none;}
+.spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;margin:2rem auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.notice{font-size:13px;color:var(--muted);text-align:center;padding:1rem;}
+.tab-bar{display:flex;border-bottom:1px solid var(--border);margin-bottom:1.25rem;flex-wrap:wrap;}
+.week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
+.week-nav span{font-size:13px;font-weight:500;color:var(--text);}
+.hero-card{background:#FFFFFF;border:1px solid #E2DAFF;border-radius:var(--radius);padding:1.5rem;margin-bottom:12px;text-align:center;}
+
+.userbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px;}
+.userbar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.badge-inactive{background:rgba(139,135,176,0.15);color:var(--muted);}
+label.lbl{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin:2px 0 -2px;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo-wrap">
+    <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAuMzggNzIiPgogIDxwYXRoIGQ9Ik0yMzQuNDMsNTYuNzFjLTEuODMsMC0zLjM3LS42Mi00LjYyLTEuODYtMS4yNS0xLjI0LTEuODgtMi43Ny0xLjg4LTQuNnMuNjMtMy4zNiwxLjg4LTQuNmMxLjI1LTEuMjQsMi43OS0xLjg2LDQuNjItMS44NnMzLjM3LjYyLDQuNjIsMS44NmMxLjI1LDEuMjQsMS44OCwyLjc4LDEuODgsNC42cy0uNjMsMy4zNi0xLjg4LDQuNmMtMS4yNSwxLjI0LTIuNzksMS44Ni00LjYyLDEuODZaIiBmaWxsPSIjNzc0OGZmIi8+CiAgPGc+CiAgICA8cGF0aCBkPSJNMzEuNDcsMTUuMzVjLTIuMTctMS4yNi00LjctMS45LTcuNjEtMS45LTMuNTYsMC02LjQ2Ljk2LTguNywyLjg3LTEuODUsMS41OC0zLjMsMy43LTQuMzcsNi4zNmwtLjE2LTguNzFIMHY0Mi4wMWgxMS4yN3YtMjQuMzFjMC0xLjg4LjM0LTMuNDcsMS4wMy00Ljc3LjY5LTEuMywxLjY1LTIuMywyLjg5LTIuOTksMS4yNC0uNjksMi42NS0xLjAzLDQuMjMtMS4wMywyLjM4LDAsNC4yNC43NCw1LjU4LDIuMjIsMS4zNCwxLjQ4LDIuMDEsMy41MiwyLjAxLDYuMTN2MjQuNzZoMTEuMjd2LTI2LjcyYzAtMy4yOC0uNi02LjExLTEuNzgtOC40Ny0xLjE5LTIuMzctMi44Ny00LjE4LTUuMDQtNS40NVoiIGZpbGw9IiMwNzA1MWUiLz4KICAgIDxwYXRoIGQ9Ik02Ni4xOCwzNS43N2MtLjksMi43My0xLjY5LDUuNDgtMi4zNyw4LjI1LS4yMy45My0uNDYsMS44OS0uNjgsMi44NS0uMi0uOTYtLjM5LTEuOS0uNTctMi44My0uNTQtMi43Ni0xLjIzLTUuNTEtMi4wOS04LjI3bC03LjA2LTIxLjhoLTExLjk5bDE1Ljc4LDQyLjEzLS4zLDIuMjVjLS4xNSwxLjQtLjU4LDIuNDktMS4zLDMuMjctLjcxLjc4LTEuNjYsMS4yNS0yLjg0LDEuNDMtMS4xOC4xNy0yLjUyLjA2LTQuMDItLjM0bC0xLjM5LS4zNC0yLjU5LDguNDljLjguMzMsMS44NS41OSwzLjE2LjgxLDEuMy4yMSwyLjcxLjMyLDQuMjEuMzIsMi44MSwwLDUuMi0uNDUsNy4xOC0xLjM1LDEuOTgtLjksMy42My0yLjE4LDQuOTYtMy44MywxLjMzLTEuNjUsMi40Mi0zLjYxLDMuMjctNS44NmwxNy44NS00Ni45N2gtMTEuODRsLTcuMzcsMjEuOFoiIGZpbGw9IiMwNzA1MWUiLz4KICAgIDxwYXRoIGQ9Ik0xNDMuOTUsMTUuMDNjLTIuMDItMS4xMy00LjMyLTEuNjktNi45LTEuNjktMi4xMywwLTQuMTcuNDItNi4xMSwxLjI2LTEuOTQuODQtMy42MiwyLjEzLTUuMDQsMy44Ny0uOTgsMS4yLTEuNzYsMi42My0yLjM2LDQuMjgtLjg2LTIuODMtMi4wMS01LjAyLTMuNDgtNi41NC0xLjg1LTEuOTItNC4zLTIuODctNy4zMy0yLjg3LTEuODgsMC0zLjY3LjM5LTUuMzcsMS4xNi0xLjcuNzgtMy4xOSwxLjk4LTQuNDUsMy42MS0uODcsMS4xMi0xLjU5LDIuNDctMi4xNyw0LjA0bC0uNDQtOC4xN2gtMTAuNDV2NDIuMDFoMTEuMjd2LTI1LjRjMC0xLjY4LjMxLTMuMS45Mi00LjI3LjYxLTEuMTYsMS40NS0yLjA1LDIuNTItMi42NSwxLjA2LS42LDIuMjYtLjksMy41OS0uOSwxLjkzLDAsMy41LjYxLDQuNzIsMS44MiwxLjIyLDEuMjIsMS44MiwyLjg1LDEuODIsNC45djI2LjQ5aDEwLjl2LTI1Ljg1YzAtMS40OC4yOC0yLjc3Ljg1LTMuODcuNTYtMS4xLDEuMzctMS45NiwyLjQtMi41NywxLjA0LS42MSwyLjI2LS45MiwzLjY2LS45MiwxLjg4LDAsMy40Ni41OCw0Ljc1LDEuNzMsMS4yOSwxLjE1LDEuOTQsMi45MiwxLjk0LDUuM3YyNi4xOWgxMS4yN3YtMjguMzNjMC0zLjA2LS41OC01LjY0LTEuNzUtNy43Ni0xLjE2LTIuMTItMi43Ni0zLjc0LTQuNzctNC44N1oiIGZpbGw9IiMwNzA1MWUiLz4KICAgIDxwYXRoIGQ9Ik0xOTAuNjgsMTUuODZjLTIuNTgtMS42LTUuNDItMi40MS04LjUzLTIuNDEtMi4zOCwwLTQuMzYuNC01Ljk0LDEuMi0xLjU4LjgtMi44NSwxLjc5LTMuODEsMi45Ny0uOTYsMS4xOC0xLjcxLDIuMzItMi4yNCwzLjQyaC0uMzRWMGgtMTEuMjd2NTUuOTloMTEuMDl2LTYuNzNoLjUzYy41MywxLjEzLDEuMjgsMi4yNiwyLjI3LDMuNC45OSwxLjE0LDIuMjcsMi4xLDMuODUsMi44NywxLjU4Ljc4LDMuNTEsMS4xNiw1Ljc5LDEuMTYsMy4yMywwLDYuMTQtLjgzLDguNzItMi41LDIuNTgtMS42Nyw0LjYyLTQuMTEsNi4xMy03LjMzLDEuNS0zLjIyLDIuMjUtNy4xNiwyLjI1LTExLjgycy0uNzctOC43OC0yLjMxLTExLjk5Yy0xLjU0LTMuMjEtMy42LTUuNjEtNi4xOC03LjIxWk0xODYuNjEsNDEuNTZjLS42OSwxLjktMS43LDMuMzktMy4wNCw0LjQ3LTEuMzQsMS4wOC0yLjk5LDEuNjItNC45NCwxLjYycy0zLjUzLS41My00Ljg5LTEuNThjLTEuMzUtMS4wNS0yLjM5LTIuNTItMy4xLTQuNDItLjcxLTEuODktMS4wNy00LjEtMS4wNy02LjYzcy4zNS00Ljc3LDEuMDUtNi42M2MuNy0xLjg3LDEuNzMtMy4zMiwzLjA4LTQuMzYsMS4zNS0xLjA0LDIuOTktMS41Niw0LjkyLTEuNTZzMy42My41NCw0Ljk2LDEuNjJjMS4zMywxLjA4LDIuMzQsMi41NiwzLjAyLDQuNDMuNjksMS44OCwxLjAzLDQuMDUsMS4wMyw2LjVzLS4zNCw0LjY0LTEuMDMsNi41NFoiIGZpbGw9IiMwNzA1MWUiLz4KICAgIDxyZWN0IHg9IjIwNS41MyIgd2lkdGg9IjExLjI3IiBoZWlnaHQ9IjU1Ljk5IiBmaWxsPSIjMDcwNTFlIi8+CiAgICA8cGF0aCBkPSJNMjg4LjU1LDE5LjA1Yy0yLjgzLS4yMS01LjM5LjM4LTcuNywxLjctMS4zMi43NS0yLjQ4LDEuNzQtMy40OSwyLjg4bC0xLjE4LDEuMzFjLTMuNjctMi4yNy02LjExLTYuMzEtNi4xMS0xMC45NmgtMTkuNDhjMCwxMi41MSw3LjA4LDIzLjM1LDE3LjQ2LDI4Ljc0LTIuNTgtLjIyLTUuMy0xLjEtNy40Ny0yLjA3LTMuNDcsMy4yNC05LDguNjYtOS45OCwxNi4wNiwxLjMxLDAsMi42OC0uNTQsMy44OC0xLjQ1LDIuMDktMS41OCw0LjMxLTIuOTgsNi43Ni0zLjkxLDguMTEtMy4wOCwxNS42NC0zLjcxLDIxLjMzLTguODMsNi42NC01LjY3LDcuNTQtMTEuNDIsNi4wMi0xNi44OGgwYzAtLjY2Ljk1LTIuMjguOTUtMi4yOCw0LjM3LTUuMDEsMTAuMTYtNy42NiwxMC44My05LjM4bC0xMS44Myw1LjA3WiIgZmlsbD0iIzA3MDUxZSIvPgogIDwvZz4KPC9zdmc+" alt="Nymbl" />
+    <div class="sub">Timeclock</div>
+  </div>
+  <div id="app"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+'use strict';
+/* Nymbl Timeclock — Microsoft sign-in version.
+   Security is enforced by the database (Row Level Security), not by this page. */
+const SURL='https://hdjujofjpyzkzzhwaegb.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkanVqb2ZqcHl6a3p6aHdhZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzI5NTksImV4cCI6MjA5MTg0ODk1OX0.bVvDP_d9dALvlvVnbuACftXlp4UEiYt_peU4hudFNTc';
+const sb=window.supabase.createClient(SURL,SKEY,{auth:{flowType:'pkce',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+
+/* ---------- helpers ---------- */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const COLORS=[{bg:'#2D1B69',text:'#C4B5FD'},{bg:'#1E3A5F',text:'#93C5FD'},{bg:'#1A3A2A',text:'#6EE7B7'},{bg:'#3B1F2B',text:'#F9A8D4'},{bg:'#2D2A1A',text:'#FDE68A'},{bg:'#1F2937',text:'#9CA3AF'}];
+const clr=id=>COLORS[Math.abs(Number(id)||0)%COLORS.length];
+const initials=n=>String(n||'?').trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';
+const fmtT=ts=>new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const fmtD=ts=>new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+const fmtDur=ms=>{const totalM=Math.round(ms/60000),h=Math.floor(totalM/60),m=totalM%60;return h>0?h+'h '+m+'m':m+'m';};
+const toLDT=ts=>{const d=new Date(ts);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const todayStr=()=>ymd(new Date());
+const TOLAB={pto:'PTO',sick:'Sick',holiday:'Holiday'};
+const TOBADGE={pto:'badge-pto',sick:'badge-sick',holiday:'badge-holiday'};
+const PL={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch start',lunch_in:'Lunch end'};
+
+function getWeekRange(offset){
+  const now=new Date(),day=now.getDay();
+  const sun=new Date(now);sun.setDate(now.getDate()-day+offset*7);sun.setHours(0,0,0,0);
+  const sat=new Date(sun);sat.setDate(sun.getDate()+6);sat.setHours(23,59,59,999);
+  return{start:sun,end:sat};
+}
+function statusOf(p){if(!p)return'out';if(p.type==='shift_in'||p.type==='lunch_in')return'in';if(p.type==='lunch_out')return'lunch';return'out';}
+function statusLabel(s){if(s==='in')return['In','badge-in'];if(s==='lunch')return['On lunch','badge-lunch'];return['Out','badge-out'];}
+function actions(s){if(s==='out')return[['shift_in','Punch in','btn-primary']];if(s==='in')return[['lunch_out','🍽 Start lunch','btn-lunch'],['shift_out','Punch out','btn-danger']];if(s==='lunch')return[['lunch_in','🍽 End lunch','btn-lunch'],['shift_out','Punch out','btn-danger']];return[];}
+const toMinute=ts=>Math.floor(new Date(ts).getTime()/60000)*60000;
+function workedMs(punches){ // punches ascending
+  let sMs=0,lMs=0,sS=null,lS=null;
+  punches.forEach(p=>{const t=toMinute(p.punched_at);
+    if(p.type==='shift_in')sS=t;
+    if(p.type==='shift_out'&&sS!==null){sMs+=t-sS;sS=null;}
+    if(p.type==='lunch_out')lS=t;
+    if(p.type==='lunch_in'&&lS!==null){lMs+=t-lS;lS=null;}
+  });
+  return Math.max(0,sMs-lMs);
+}
+function errMsg(e){
+  const m=(e&&e.message)?e.message:String(e);
+  if(e&&e.code==='23505')return 'That entry already exists (the email or name is already in use).';
+  if((e&&e.code==='42501')||/row-level security|permission denied/i.test(m))return "You don't have permission to do that.";
+  return m;
+}
+async function must(p){const r=await p;if(r.error)throw r.error;return r.data;}
+async function guard(fn){try{await fn();}catch(e){alert('Error: '+errMsg(e));}}
+async function fetchAll(build){let out=[],from=0;const step=1000;for(;;){const rows=await must(build(from,from+step-1));out=out.concat(rows||[]);if(!rows||rows.length<step)break;from+=step;}return out;}
+async function getPunches(id,start,end){
+  let q=sb.from('punches').select('*').eq('agent_id',id).order('punched_at',{ascending:false}).limit(200);
+  if(start)q=q.gte('punched_at',start.toISOString());
+  if(end)q=q.lte('punched_at',end.toISOString());
+  return (await must(q))||[];
+}
+const getTO=id=>must(sb.from('time_off').select('*').eq('agent_id',id).order('date',{ascending:false}).limit(50));
+
+/* ---------- state ---------- */
+let view='loading',session=null,me={agent:null,roles:[],isAdmin:false,isMgr:false};
+let teams=[],agents=[],latest={},managers=[];
+let tab='me',teamFilter='all',showInactive=false,loading=false,loginErr='';
+let myPunches=[],myWeek=[],myTab='today';
+let wPunches=[],wTO=[],wkOffset=0;
+let editAgent=null,editPunches=[],editMsg='',editingPunchId=null;
+let toAgent=null,toList=[],toMsg='';
+let agMsg='',adminMsg='',agEditing=null;
+
+function resetState(){
+  me={agent:null,roles:[],isAdmin:false,isMgr:false};
+  teams=[];agents=[];latest={};managers=[];myPunches=[];myWeek=[];wPunches=[];wTO=[];
+  tab='me';teamFilter='all';wkOffset=0;myTab='today';
+}
+const teamName=id=>{const t=teams.find(x=>x.id===id);return t?t.name:'';};
+const manageable=()=>me.isAdmin?teams:teams.filter(t=>me.roles.some(r=>r.team_id===t.id));
+const vis=()=>agents.filter(a=>teamFilter==='all'||a.team_id===teamFilter);
+
+/* ---------- data loading ---------- */
+async function loadMgrData(){
+  const [ag,lp,tm]=await Promise.all([
+    must(sb.from('agents').select('*').order('name')),
+    must(sb.rpc('latest_punches')),
+    me.isAdmin?must(sb.from('team_members').select('*').order('email')):Promise.resolve([])
+  ]);
+  agents=ag||[];latest={};(lp||[]).forEach(p=>{latest[p.agent_id]=p;});managers=tm||[];
+}
+async function loadMine(){
+  myPunches=await getPunches(me.agent.id);
+  if(myTab==='week'){const{start,end}=getWeekRange(0);myWeek=await getPunches(me.agent.id,start,end);}
+}
+async function loadWeek(){
+  loading=true;render();
+  const{start,end}=getWeekRange(wkOffset);
+  try{
+    wPunches=await fetchAll((f,t)=>sb.from('punches').select('*').gte('punched_at',start.toISOString()).lte('punched_at',end.toISOString()).order('punched_at',{ascending:true}).order('id').range(f,t));
+    wTO=await fetchAll((f,t)=>sb.from('time_off').select('*').gte('date',ymd(start)).lte('date',ymd(end)).order('date').order('id').range(f,t));
+  }catch(e){wPunches=[];wTO=[];alert('Could not load the report: '+errMsg(e));}
+  loading=false;render();
+}
+
+/* ---------- boot / auth ---------- */
+async function boot(){
+  const q=new URLSearchParams(location.search);
+  const h=new URLSearchParams(location.hash.replace(/^#/,''));
+  const oauthErr=q.get('error_description')||h.get('error_description');
+  if(oauthErr)loginErr=oauthErr;
+  try{
+    const{data}=await sb.auth.getSession();
+    session=data.session;
+  }catch(e){loginErr='Sign-in problem: '+errMsg(e);}
+  if(q.get('code')||q.get('error')||h.get('error'))history.replaceState({},document.title,location.pathname);
+  sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&session){session=null;resetState();view='login';render();}});
+  if(session)await enter();else{view='login';render();}
+}
+async function enter(){
+  view='loading';render();
+  try{
+    await sb.rpc('claim_access'); // links this login to the agent/manager record with the same email
+    const uid=session.user.id;
+    const[a,tm]=await Promise.all([
+      must(sb.from('agents').select('*').eq('user_id',uid)),
+      must(sb.from('team_members').select('*').eq('user_id',uid))
+    ]);
+    me.agent=(a&&a[0])||null;me.roles=tm||[];
+    me.isAdmin=me.roles.some(r=>r.role==='admin'&&r.team_id==null);
+    me.isMgr=me.roles.length>0;
+    teams=(await must(sb.from('teams').select('*').order('name')))||[];
+    if(!me.isMgr&&!me.agent){view='noaccess';render();return;}
+    if(!me.isMgr&&me.agent&&!me.agent.active){view='inactive';render();return;}
+    if(me.isMgr)await loadMgrData();
+    const isAgent=!!(me.agent&&me.agent.active);
+    if(isAgent)await loadMine();
+    tab=isAgent?'me':'team';
+    view='main';render();
+  }catch(e){loginErr='Could not load your account: '+errMsg(e);view='error';render();}
+}
+
+/* ---------- views ---------- */
+function render(){
+  const f={loading:rLoading,login:rLogin,noaccess:rNoAccess,inactive:rInactive,error:rError,main:rMain,'edit-punches':rEditPunches,'time-off':rTimeOff,'edit-agent':rEditAgent}[view]||rLoading;
+  document.getElementById('app').innerHTML=f();
+  updateClock();
+}
+const heroClock=()=>'<div class="hero-card"><div class="time-display" id="lt" style="color:#26045E;margin-bottom:4px"></div><div style="font-size:12px;color:#7B6FA8;letter-spacing:0.05em" id="ld"></div></div>';
+const userbar=()=>'<div class="userbar"><span>'+esc(session&&session.user.email||'')+'</span><button class="btn btn-ghost btn-sm" id="b-logout">Sign out</button></div>';
+const rLoading=()=>'<div class="spinner"></div>';
+function rLogin(){
+  return heroClock()+'<div style="display:flex;flex-direction:column;gap:10px"><button class="btn btn-primary btn-full" id="b-login" style="font-size:16px;padding:16px;font-family:Sora,sans-serif;font-weight:600;color:#fff">Sign in with Microsoft</button></div><div class="err">'+esc(loginErr)+'</div><p class="notice">Use your Nymbl work account.</p>';
+}
+function rNoAccess(){
+  return userbar()+'<div class="card" style="text-align:center"><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif;margin-bottom:8px">No access yet</div><p class="notice" style="padding:0 0 1rem">You are signed in as <b>'+esc(session.user.email)+'</b>, but this email has not been added to the timeclock. Ask your manager to add it, then check again.</p><button class="btn btn-primary btn-full" id="b-retry">Check again</button></div>';
+}
+function rInactive(){
+  return userbar()+'<div class="card" style="text-align:center"><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif;margin-bottom:8px">Account inactive</div><p class="notice" style="padding:0">Your timeclock account is no longer active. If you think this is a mistake, contact your manager.</p></div>';
+}
+function rError(){
+  return userbar()+'<div class="card" style="text-align:center"><div class="err" style="min-height:0;margin-bottom:12px">'+esc(loginErr)+'</div><button class="btn btn-primary btn-full" id="b-retry">Try again</button></div>';
+}
+function tabsFor(){
+  const t=[];
+  if(me.agent&&me.agent.active)t.push(['me','My time']);
+  if(me.isMgr){t.push(['team','Team'],['week','Reports'],['agents','Agents']);if(me.isAdmin)t.push(['admin','Admin']);}
+  return t;
+}
+const tabSty=k=>'padding:9px 12px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:'+(tab===k?'var(--text)':'var(--muted)')+';border-bottom:2px solid '+(tab===k?'var(--accent)':'transparent')+';margin-bottom:-1px;font-family:Inter,sans-serif;';
+function teamSelect(){
+  if(teams.length<2)return'';
+  return '<select id="tf" style="margin-bottom:12px"><option value="all">All teams</option>'+teams.map(t=>'<option value="'+t.id+'"'+(teamFilter===t.id?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>';
+}
+function rMain(){
+  const tabs=tabsFor();
+  if(!tabs.length){return userbar()+'<p class="notice">Nothing to show.</p>';}
+  if(!tabs.find(t=>t[0]===tab))tab=tabs[0][0];
+  const bar='<div class="tab-bar">'+tabs.map(([k,l])=>'<button style="'+tabSty(k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>';
+  const body={me:rMe,team:rTeam,week:rWeek,agents:rAgents,admin:rAdmin}[tab]();
+  return userbar()+bar+body;
+}
+
+function rMe(){
+  const a=me.agent,c=clr(a.id),s=statusOf(myPunches[0]),[lb,cls]=statusLabel(s);
+  const d0=new Date();d0.setHours(0,0,0,0);
+  const today=myPunches.filter(p=>new Date(p.punched_at)>=d0).reverse();
+  const btns=actions(s).map(([t,l,bc])=>'<button class="btn '+bc+' btn-full" data-punch="'+t+'">'+l+'</button>').join('');
+  const tabStyle=t=>'padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:'+(myTab===t?'var(--text)':'var(--muted)')+';border-bottom:2px solid '+(myTab===t?'var(--accent)':'transparent')+';margin-bottom:-1px;font-family:Inter,sans-serif;';
+  const tabs='<div class="tab-bar"><button style="'+tabStyle('today')+'" data-atab="today">Today</button><button style="'+tabStyle('week')+'" data-atab="week">This week</button></div>';
+  let content='';
+  if(myTab==='today'){
+    const log=today.length===0?'<p class="notice" style="padding:0.5rem 0">No punches yet today</p>':today.map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('');
+    content='<div class="card"><div class="card-title">Today\'s punches</div>'+log+'</div>';
+  }else if(myWeek.length===0){
+    content='<div class="card"><p class="notice">No punches this week.</p></div>';
+  }else{
+    const byDay={};
+    myWeek.forEach(p=>{const d=fmtD(p.punched_at);(byDay[d]=byDay[d]||[]).push(p);});
+    const total=workedMs([...myWeek].reverse());
+    content='<div class="card"><div class="card-title">Worked this week: '+fmtDur(total)+'</div>'+Object.entries(byDay).map(([day,ps])=>'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;padding:6px 0 4px">'+esc(day)+'</div>'+[...ps].reverse().map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('')+'</div>').join('')+'</div>';
+  }
+  return heroClock()+'<div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">'+btns+'</div>')+tabs+content;
+}
+
+function rTeam(){
+  const list=vis().filter(a=>a.active);
+  const clocked=list.filter(a=>statusOf(latest[a.id])!=='out').length;
+  const rows=list.length===0?'<p class="notice">No active agents.</p>':list.map(a=>{
+    const c=clr(a.id),lp=latest[a.id],[lb,cls]=statusLabel(statusOf(lp));
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1"><div style="font-weight:500">'+esc(a.name)+'</div>'+(lp?'<div style="font-size:11px;color:var(--muted)">'+fmtD(lp.punched_at)+' · '+fmtT(lp.punched_at)+'</div>':'')+'</div><span class="badge '+cls+'">'+lb+'</span></div>';
+  }).join('');
+  return teamSelect()+'<div class="stat-grid"><div class="stat"><div class="stat-val">'+list.length+'</div><div class="stat-label">Agents</div></div><div class="stat"><div class="stat-val" style="color:#7748FF">'+clocked+'</div><div class="stat-label">Clocked in</div></div><div class="stat"><div class="stat-val">'+(list.length-clocked)+'</div><div class="stat-label">Off</div></div></div><div class="card">'+rows+'</div>';
+}
+
+function weekGroups(){
+  const g={};
+  vis().forEach(a=>{g[a.id]={a,punches:[],to:[]};});
+  wPunches.forEach(p=>{if(g[p.agent_id])g[p.agent_id].punches.push(p);});
+  wTO.forEach(t=>{if(g[t.agent_id])g[t.agent_id].to.push(t);});
+  return g;
+}
+function rWeek(){
+  if(loading)return teamSelect()+'<div class="spinner"></div>';
+  const{start,end}=getWeekRange(wkOffset);
+  const fmt=d=>d.toLocaleDateString([],{month:'short',day:'numeric'});
+  const nav='<div class="week-nav"><button class="btn btn-sm btn-ghost" id="b-wp">← Prev</button><span>'+fmt(start)+' – '+fmt(end)+'</span><button class="btn btn-sm btn-ghost" id="b-wn"'+(wkOffset===0?' disabled style="opacity:0.3"':'')+'>Next →</button></div>';
+  const rows=Object.values(weekGroups()).map(g=>{
+    if(!g.punches.length&&!g.to.length)return'';
+    const wMs=workedMs(g.punches),toH=g.to.reduce((s,t)=>s+Number(t.hours),0);
+    const toBadges=g.to.map(t=>'<span class="badge '+(TOBADGE[t.type]||'badge-out')+'" style="margin-right:3px">'+esc(TOLAB[t.type]||t.type)+' '+esc(t.hours)+'h</span>').join('');
+    const c=clr(g.a.id);
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';flex-shrink:0">'+esc(initials(g.a.name))+'</div><div style="flex:1;min-width:100px"><div style="font-weight:500">'+esc(g.a.name)+(g.a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div>'+(toBadges?'<div style="margin-top:3px">'+toBadges+'</div>':'')+'</div><div style="text-align:right;font-size:13px"><div style="font-weight:600;font-family:Sora,sans-serif">'+fmtDur(wMs)+'</div>'+(toH?'<div style="color:var(--muted);font-size:11px">+'+toH+'h off</div>':'')+'</div></div>';
+  }).filter(Boolean).join('')||'<p class="notice">No data for this week.</p>';
+  return teamSelect()+nav+'<div class="card">'+rows+'</div><button class="btn btn-primary btn-full" id="b-export" style="margin-top:4px">Export CSV for HR</button>';
+}
+
+function rAgents(){
+  const mt=manageable();
+  const list=vis();
+  const act=list.filter(a=>a.active),inact=list.filter(a=>!a.active);
+  const shown=showInactive?act.concat(inact):act;
+  const row=a=>{
+    const c=clr(a.id);
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:120px"><div style="font-weight:500">'+esc(a.name)+(a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div><div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(a.email||'No email yet')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(a.timezone||'')+(teams.length>1&&teamName(a.team_id)?' · '+esc(teamName(a.team_id)):'')+'</div></div><div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn btn-sm" data-edag="'+a.id+'" style="font-size:11px">Edit</button><button class="btn btn-sm" data-tob="'+a.id+'" style="font-size:11px">Time off</button><button class="btn btn-sm" data-epb="'+a.id+'" style="font-size:11px">Punches</button>'+(a.active?'<button class="btn btn-sm" data-deact="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Deactivate</button>':'<button class="btn btn-sm btn-primary" data-react="'+a.id+'" style="font-size:11px">Reactivate</button>')+'</div></div>';
+  };
+  const defTeam=teamFilter!=='all'&&mt.find(t=>t.id===teamFilter)?teamFilter:(mt[0]&&mt[0].id);
+  const teamPick=mt.length>1?'<select id="nt">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===defTeam?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
+  return teamSelect()+'<div class="card" style="margin-bottom:12px"><div class="card-title">Add agent</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="nn" placeholder="Full name" /><input type="email" id="ne" placeholder="Work email (used to sign in)" />'+tzSelect('ntz','EST')+teamPick+'<button class="btn btn-primary" id="b-add">Add agent</button></div><div class="err" id="ae">'+esc(agMsg)+'</div></div><div class="card"><div class="card-title">Agents ('+act.length+' active)</div>'+(shown.length?shown.map(row).join(''):'<p class="notice">No agents yet.</p>')+(inact.length?'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);padding-top:12px;cursor:pointer"><input type="checkbox" id="show-inact" style="width:auto"'+(showInactive?' checked':'')+'> Show inactive ('+inact.length+')</label>':'')+'</div>';
+}
+function tzSelect(id,sel){
+  const opts=[['EST','EST — Eastern'],['CST','CST — Central'],['MST','MST — Mountain'],['PST','PST — Pacific'],['AKST','AKST — Alaska'],['HST','HST — Hawaii']];
+  return '<select id="'+id+'">'+opts.map(([v,l])=>'<option value="'+v+'"'+(v===sel?' selected':'')+'>'+l+'</option>').join('')+'</select>';
+}
+function rEditAgent(){
+  const a=agEditing,mt=manageable();
+  const teamPick=mt.length>1?'<label class="lbl">Team</label><select id="eat">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===a.team_id?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div class="card-title">Edit agent</div><div style="display:flex;flex-direction:column;gap:8px"><label class="lbl">Name</label><input type="text" id="ean" value="'+esc(a.name)+'" /><label class="lbl">Work email</label><input type="email" id="eae" value="'+esc(a.email||'')+'" /><label class="lbl">Time zone</label>'+tzSelect('eaz',a.timezone||'EST')+teamPick+'<button class="btn btn-primary" id="b-saveag">Save</button></div><div class="err" id="eam">'+esc(agMsg)+'</div><p class="notice" style="padding:8px 0 0">Changing the email means the person signs in with the new email address.</p></div>';
+}
+
+function rAdmin(){
+  const mt=teams.map(t=>{const n=agents.filter(a=>a.team_id===t.id&&a.active).length;return '<div class="row-item"><div style="flex:1;font-weight:500">'+esc(t.name)+'</div><div style="font-size:12px;color:var(--muted)">'+n+' active</div></div>';}).join('')||'<p class="notice">No teams.</p>';
+  const mg=managers.map(m=>{
+    const scope=m.team_id==null?'All teams (admin)':(teamName(m.team_id)||'Team '+m.team_id);
+    const self=m.user_id&&session&&m.user_id===session.user.id;
+    return '<div class="row-item"><div style="flex:1;min-width:0"><div style="font-weight:500;word-break:break-all">'+esc(m.email)+'</div><div style="font-size:11px;color:var(--muted)">'+esc(m.role==='admin'?'Admin':'Manager')+' · '+esc(scope)+(m.user_id?'':' · hasn\'t signed in yet')+'</div></div>'+(self?'':'<button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-rmmgr="'+m.id+'">Remove</button>')+'</div>';
+  }).join('')||'<p class="notice">No managers.</p>';
+  const scopeOpts='<option value="all">All teams (admin)</option>'+teams.map(t=>'<option value="'+t.id+'">'+esc(t.name)+' (manager)</option>').join('');
+  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Teams</div>'+mt+'<div style="display:flex;gap:8px;margin-top:12px"><input type="text" id="ntn" placeholder="New team name" /><button class="btn btn-primary" id="b-addteam">Add</button></div></div><div class="card"><div class="card-title">Managers and admins</div>'+mg+'<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px"><input type="email" id="nme" placeholder="Work email" /><select id="nms">'+scopeOpts+'</select><button class="btn btn-primary" id="b-addmgr">Add manager / admin</button></div></div><div class="err" id="adm">'+esc(adminMsg)+'</div>';
+}
+
+function rEditPunches(){
+  const a=editAgent,c=clr(a.id);
+  const LB={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch Out',lunch_in:'Lunch In'};
+  const typeOpts=sel=>['shift_in','lunch_out','lunch_in','shift_out'].map(v=>'<option value="'+v+'"'+(v===sel?' selected':'')+'>'+LB[v]+'</option>').join('');
+  const rows=editPunches.slice(0,40).map(p=>{
+    if(editingPunchId===p.id){
+      return '<div class="row-item" style="flex-direction:column;align-items:stretch;gap:8px"><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:500;font-size:13px">'+LB[p.type]+'</span><span style="font-size:11px;color:var(--muted)">editing</span></div><select id="ep-type">'+typeOpts(p.type)+'</select><input type="datetime-local" id="ep-dt" value="'+toLDT(p.punched_at)+'" /><div style="display:flex;gap:6px"><button class="btn btn-primary btn-sm" style="flex:1" data-sp="'+p.id+'">Save</button><button class="btn btn-sm" style="flex:1" data-cep="1">Cancel</button><button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-dp="'+p.id+'">Delete</button></div></div>';
+    }
+    return '<div class="row-item" style="cursor:pointer" data-ep="'+p.id+'"><div style="flex:1"><div style="font-weight:500">'+LB[p.type]+'</div><div style="font-size:11px;color:var(--muted)">'+fmtD(p.punched_at)+' · '+fmtT(p.punched_at)+'</div></div><span style="font-size:11px;color:var(--accent);font-weight:500;padding:4px 8px">Edit</span></div>';
+  }).join('')||'<p class="notice">No punches this week.</p>';
+  const{start,end}=getWeekRange(wkOffset);
+  const fmt=d=>d.toLocaleDateString([],{month:'short',day:'numeric'});
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="font-size:16px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div></div><div class="card-title">Add a punch</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"><select id="apt">'+typeOpts('shift_in')+'</select><input type="datetime-local" id="apdt" value="'+toLDT(new Date())+'" /><button class="btn btn-primary" id="b-ap">Add punch</button></div><div class="ok" id="em">'+esc(editMsg)+'</div></div><div class="card"><div class="card-title">Punches '+fmt(start)+' – '+fmt(end)+' — tap to edit</div>'+rows+'</div>';
+}
+function rTimeOff(){
+  const a=toAgent,c=clr(a.id);
+  const rows=toList.slice(0,30).map(t=>'<div class="row-item"><div style="flex:1"><span class="badge '+(TOBADGE[t.type]||'badge-out')+'" style="margin-right:6px">'+esc(TOLAB[t.type]||t.type)+'</span><span style="font-weight:500">'+esc(t.date)+'</span>'+(t.note?' <span style="color:var(--muted);font-size:12px">· '+esc(t.note)+'</span>':'')+'</div><div style="font-size:13px;font-weight:500;margin-right:8px">'+esc(t.hours)+'h</div><button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-dto="'+t.id+'">Delete</button></div>').join('')||'<p class="notice">No time off recorded.</p>';
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="font-size:16px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div></div><div class="card-title">Add time off</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem"><select id="tot"><option value="pto">PTO</option><option value="sick">Sick Day</option><option value="holiday">Company Holiday</option></select><input type="date" id="tod" value="'+todayStr()+'" /><input type="number" id="toh" placeholder="Hours (e.g. 8)" min="1" max="24" value="8" /><input type="text" id="ton" placeholder="Note (optional)" /><button class="btn btn-primary" id="b-ato">Add time off</button></div><div class="ok" id="tom">'+esc(toMsg)+'</div></div><div class="card"><div class="card-title">Time off history</div>'+rows+'</div>';
+}
+
+/* ---------- events ---------- */
+const val=id=>{const el=document.getElementById(id);return el?el.value:'';};
+document.getElementById('app').addEventListener('change',async e=>{
+  if(e.target.id==='tf'){teamFilter=e.target.value==='all'?'all':Number(e.target.value);render();}
+  if(e.target.id==='show-inact'){showInactive=e.target.checked;render();}
+});
+document.getElementById('app').addEventListener('click',async e=>{
+  const t=e.target;
+  const punchB=t.closest('[data-punch]');
+  if(punchB){
+    loading=true;render();
+    try{await must(sb.rpc('punch',{p_type:punchB.dataset.punch}));}catch(err){alert(errMsg(err));}
+    try{await loadMine();}catch(err){alert(errMsg(err));}
+    loading=false;render();return;
+  }
+  const tabB=t.closest('[data-tab]');
+  if(tabB){
+    tab=tabB.dataset.tab;
+    if(tab==='week'){await guard(loadWeek);return;}
+    if(tab==='team'||tab==='agents'||tab==='admin'){await guard(loadMgrData);}
+    if(tab==='me'){await guard(loadMine);}
+    render();return;
+  }
+  const atabB=t.closest('[data-atab]');
+  if(atabB){myTab=atabB.dataset.atab;await guard(loadMine);render();return;}
+  const deB=t.closest('[data-deact]');
+  if(deB){
+    const a=agents.find(x=>x.id===Number(deB.dataset.deact));
+    const on=statusOf(latest[a.id])!=='out';
+    const msg='Deactivate '+a.name+'?\n\nThey will no longer be able to sign in or punch. Their history is kept and still appears in reports.'+(on?'\n\nNOTE: they are currently clocked in. You may want to add a punch-out for them first.':'');
+    if(!confirm(msg))return;
+    await guard(async()=>{await must(sb.from('agents').update({active:false}).eq('id',a.id));await loadMgrData();});
+    render();return;
+  }
+  const reB=t.closest('[data-react]');
+  if(reB){await guard(async()=>{await must(sb.from('agents').update({active:true}).eq('id',Number(reB.dataset.react)));await loadMgrData();});render();return;}
+  const edagB=t.closest('[data-edag]');
+  if(edagB){agEditing=agents.find(x=>x.id===Number(edagB.dataset.edag));agMsg='';view='edit-agent';render();return;}
+  const epB=t.closest('[data-epb]');
+  if(epB){
+    await guard(async()=>{
+      const{start,end}=getWeekRange(wkOffset);
+      editAgent=agents.find(a=>a.id===Number(epB.dataset.epb));
+      editPunches=await getPunches(editAgent.id,start,end);editMsg='';editingPunchId=null;view='edit-punches';
+    });
+    render();return;
+  }
+  const epRow=t.closest('[data-ep]');
+  if(epRow){editingPunchId=Number(epRow.dataset.ep);editMsg='';render();return;}
+  if(t.closest('[data-cep]')){editingPunchId=null;render();return;}
+  const spB=t.closest('[data-sp]');
+  if(spB){
+    const v=val('ep-dt'),type=val('ep-type');
+    if(!v){editMsg='Pick a time.';render();return;}
+    try{
+      await must(sb.from('punches').update({punched_at:new Date(v).toISOString(),type}).eq('id',Number(spB.dataset.sp)));
+      const{start,end}=getWeekRange(wkOffset);editPunches=await getPunches(editAgent.id,start,end);editingPunchId=null;editMsg='Saved!';
+    }catch(ex){editMsg='Error: '+errMsg(ex);}
+    render();return;
+  }
+  const dpB=t.closest('[data-dp]');
+  if(dpB){
+    if(!confirm('Delete this punch?'))return;
+    await guard(async()=>{await must(sb.from('punches').delete().eq('id',Number(dpB.dataset.dp)));const{start,end}=getWeekRange(wkOffset);editPunches=await getPunches(editAgent.id,start,end);editingPunchId=null;editMsg='Deleted.';});
+    render();return;
+  }
+  const toB=t.closest('[data-tob]');
+  if(toB){
+    await guard(async()=>{toAgent=agents.find(a=>a.id===Number(toB.dataset.tob));toList=(await getTO(toAgent.id))||[];toMsg='';view='time-off';});
+    render();return;
+  }
+  const dtoB=t.closest('[data-dto]');
+  if(dtoB){
+    if(!confirm('Delete this entry?'))return;
+    await guard(async()=>{await must(sb.from('time_off').delete().eq('id',Number(dtoB.dataset.dto)));toList=(await getTO(toAgent.id))||[];toMsg='Deleted.';});
+    render();return;
+  }
+  const rmB=t.closest('[data-rmmgr]');
+  if(rmB){
+    const m=managers.find(x=>x.id===Number(rmB.dataset.rmmgr));
+    if(!confirm('Remove '+m.email+' as '+m.role+'?'))return;
+    await guard(async()=>{await must(sb.from('team_members').delete().eq('id',m.id));await loadMgrData();adminMsg='';});
+    render();return;
+  }
+  const bid=t.id||(t.closest('button')&&t.closest('button').id);
+  if(bid==='b-login'){
+    loginErr='';
+    const{error}=await sb.auth.signInWithOAuth({provider:'azure',options:{scopes:'email',redirectTo:location.origin+location.pathname}});
+    if(error){loginErr=errMsg(error);render();}
+  }
+  else if(bid==='b-logout'){await sb.auth.signOut();session=null;resetState();loginErr='';view='login';render();}
+  else if(bid==='b-retry'){await enter();}
+  else if(bid==='b-back'){view='main';tab='agents';render();}
+  else if(bid==='b-wp'){wkOffset--;await loadWeek();}
+  else if(bid==='b-wn'){if(wkOffset<0){wkOffset++;await loadWeek();}}
+  else if(bid==='b-export'){exportCSV();}
+  else if(bid==='b-add'){
+    const name=val('nn').trim(),email=val('ne').trim().toLowerCase(),tz=val('ntz');
+    const mt=manageable();
+    const team_id=document.getElementById('nt')?Number(val('nt')):(teamFilter!=='all'&&mt.find(x=>x.id===teamFilter)?teamFilter:(mt[0]&&mt[0].id));
+    if(!name){agMsg='Enter a name.';render();return;}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){agMsg='Enter a valid work email.';render();return;}
+    if(!team_id){agMsg='No team available to add to.';render();return;}
+    try{await must(sb.from('agents').insert({name,email,timezone:tz,team_id}));agMsg='';await loadMgrData();}catch(ex){agMsg=errMsg(ex);}
+    render();
+  }
+  else if(bid==='b-saveag'){
+    const name=val('ean').trim(),email=val('eae').trim().toLowerCase(),tz=val('eaz');
+    const upd={name,email:email||null,timezone:tz};
+    if(document.getElementById('eat'))upd.team_id=Number(val('eat'));
+    if(!name){agMsg='Enter a name.';render();return;}
+    if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){agMsg='Enter a valid email.';render();return;}
+    try{await must(sb.from('agents').update(upd).eq('id',agEditing.id));await loadMgrData();agMsg='';view='main';tab='agents';}catch(ex){agMsg=errMsg(ex);}
+    render();
+  }
+  else if(bid==='b-ap'){
+    const type=val('apt'),v=val('apdt');
+    if(!v){editMsg='Pick a time.';render();return;}
+    try{
+      await must(sb.from('punches').insert({agent_id:editAgent.id,team_id:editAgent.team_id,type,punched_at:new Date(v).toISOString()}));
+      const{start,end}=getWeekRange(wkOffset);editPunches=await getPunches(editAgent.id,start,end);editMsg='Added!';
+    }catch(ex){editMsg='Error: '+errMsg(ex);}
+    render();
+  }
+  else if(bid==='b-ato'){
+    const type=val('tot'),date=val('tod'),hours=val('toh'),note=val('ton').trim();
+    if(!date||!hours){toMsg='Fill in date and hours.';render();return;}
+    try{await must(sb.from('time_off').insert({agent_id:toAgent.id,team_id:toAgent.team_id,date,type,hours:Number(hours),note:note||null}));toList=(await getTO(toAgent.id))||[];toMsg='Added!';}catch(ex){toMsg='Error: '+errMsg(ex);}
+    render();
+  }
+  else if(bid==='b-addteam'){
+    const name=val('ntn').trim();
+    if(!name){adminMsg='Enter a team name.';render();return;}
+    try{await must(sb.from('teams').insert({name}));teams=(await must(sb.from('teams').select('*').order('name')))||[];adminMsg='';}catch(ex){adminMsg=errMsg(ex);}
+    render();
+  }
+  else if(bid==='b-addmgr'){
+    const email=val('nme').trim().toLowerCase(),scope=val('nms');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){adminMsg='Enter a valid work email.';render();return;}
+    const row=scope==='all'?{email,role:'admin',team_id:null}:{email,role:'manager',team_id:Number(scope)};
+    try{await must(sb.from('team_members').insert(row));await loadMgrData();adminMsg='';}catch(ex){adminMsg=errMsg(ex);}
+    render();
+  }
+});
+
+/* ---------- CSV export for HR (same layout as the original timeclock) ---------- */
+function exportCSV(){
+  const{start,end}=getWeekRange(wkOffset);
+  const wk=start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const weekLabel=wk+' - '+end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const grouped={};
+  vis().forEach(a=>{grouped[a.id]={name:a.name,tz:a.timezone||'',events:[],to:[]};});
+  wPunches.forEach(p=>{if(grouped[p.agent_id])grouped[p.agent_id].events.push(p);});
+  wTO.forEach(x=>{if(grouped[x.agent_id])grouped[x.agent_id].to.push(x);});
+  const msToHrs=ms=>Math.round(ms/36000)/100;
+  const fmt2=n=>n>0?n.toFixed(2):'';
+  const TZ_IANA={EST:'America/New_York',CST:'America/Chicago',MST:'America/Denver',PST:'America/Los_Angeles',AKST:'America/Anchorage',HST:'Pacific/Honolulu'};
+  const agentFmt=(tz,ts,opts)=>new Intl.DateTimeFormat('en-US',{timeZone:TZ_IANA[tz]||'UTC',...opts}).format(new Date(ts));
+  const PUNCH_LABEL={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch Out',lunch_in:'Lunch In'};
+  // quote a cell; neutralise leading = + - @ so spreadsheets never run typed text as a formula
+  const q=s=>{s=String(s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
+
+  let csv='Nymbl Timeclock Report\n';
+  csv+='"Week: '+weekLabel+'"\n';
+  csv+='\n';
+  csv+='Agent,Timezone,Date,Punch Type,Time,Hours Worked,Time Off Type,Time Off Hours,Note,Grand Total\n';
+
+  Object.values(grouped).forEach(g=>{
+    if(!g.events.length&&!g.to.length)return;
+    let workedHrsWeek=0,toHrsWeek=0;
+    const agentDay=ts=>agentFmt(g.tz,ts,{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$1-$2');
+    const fmtTime=ts=>agentFmt(g.tz,ts,{hour:'2-digit',minute:'2-digit',hour12:true});
+    const byDay={};
+    g.events.forEach(p=>{const day=agentDay(p.punched_at);if(!byDay[day])byDay[day]={punches:[],to:[]};byDay[day].punches.push(p);});
+    g.to.forEach(x=>{const day=x.date;if(!byDay[day])byDay[day]={punches:[],to:[]};byDay[day].to.push(x);});
+    csv+=q(g.name)+',"'+g.tz+'","","","","","","","",""\n';
+    Object.entries(byDay).sort().forEach(([day,data])=>{
+      const dayLabel=new Date(day+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric',year:'2-digit'});
+      const sorted=[...data.punches].sort((a,b)=>new Date(a.punched_at)-new Date(b.punched_at));
+      // Punch times are only shown to the minute, so hours are computed on whole minutes too.
+      let dayMs=0,lastIn=null,lastBreakOut=null,breakMs=0;
+      sorted.forEach(p=>{
+        const tm=toMinute(p.punched_at);
+        if(p.type==='shift_in'){lastIn=tm;}
+        else if(p.type==='lunch_out'){lastBreakOut=tm;}
+        else if(p.type==='lunch_in'){if(lastBreakOut!==null){breakMs+=tm-lastBreakOut;}lastBreakOut=null;}
+        else if(p.type==='shift_out'){if(lastIn!==null){dayMs+=tm-lastIn;}lastIn=null;}
+      });
+      const dayWorkedHrs=msToHrs(Math.max(0,dayMs-breakMs));
+      workedHrsWeek+=dayWorkedHrs;
+      const toLabels=data.to.map(x=>TOLAB[x.type]).join(', ');
+      const dayToHrs=data.to.reduce((s,x)=>s+Number(x.hours),0);
+      toHrsWeek+=dayToHrs;
+      const toNotes=data.to.map(x=>x.note).filter(Boolean).join(', ');
+      sorted.forEach(p=>{csv+=',"",'+q(dayLabel)+','+q(PUNCH_LABEL[p.type]||p.type)+','+q(fmtTime(p.punched_at))+',"","","","",""\n';});
+      if(sorted.length===0&&data.to.length){csv+=',"",'+q(dayLabel)+',"","","",'+q(toLabels)+','+q(dayToHrs>0?dayToHrs.toFixed(2):'')+','+q(toNotes)+',""\n';}
+      csv+=',"","Daily Total","","",'+q(fmt2(dayWorkedHrs))+','+q(toLabels)+','+q(dayToHrs>0?dayToHrs.toFixed(2):'')+','+q(toNotes)+',""\n';
+    });
+    const grandTotal=workedHrsWeek+toHrsWeek;
+    csv+=',"","WEEK TOTAL","","",'+q(fmt2(workedHrsWeek))+',"",'+q(toHrsWeek>0?toHrsWeek.toFixed(2):'')+',"",'+q(fmt2(grandTotal))+'\n';
+    csv+='\n';
+  });
+
+  const tn=teamFilter!=='all'?'_'+teamName(teamFilter).replace(/[^a-z0-9]+/gi,'_'):'';
+  const link=document.createElement('a');
+  link.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\ufeff'+csv);
+  link.download='nymbl_timeclock'+tn+'_'+wk.replace(/\s/g,'_')+'.csv';
+  link.click();
+}
+
+/* ---------- clock ---------- */
+function updateClock(){
+  const now=new Date(),t=document.getElementById('lt'),d=document.getElementById('ld');
+  if(t)t.textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(d)d.textContent=now.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+}
+setInterval(updateClock,1000);
+boot();
+
+</script>
+</body>
+</html>
