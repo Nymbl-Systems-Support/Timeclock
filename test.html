@@ -142,7 +142,7 @@ const todayStr=()=>ymd(new Date());
 const TOLAB={pto:'PTO',sick:'Sick',holiday:'Holiday'};
 const TOBADGE={pto:'badge-pto',sick:'badge-sick',holiday:'badge-holiday'};
 const PL={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch start',lunch_in:'Lunch end'};
-const TZ_IANA={EST:'America/New_York',CST:'America/Chicago',MST:'America/Denver',PST:'America/Los_Angeles',AKST:'America/Anchorage',HST:'Pacific/Honolulu'};
+const TZ_IANA={EST:'America/New_York',CST:'America/Chicago',MST:'America/Denver',AZ:'America/Phoenix',PST:'America/Los_Angeles',AKST:'America/Anchorage',HST:'Pacific/Honolulu'};
 const tzOf=a=>TZ_IANA[a&&a.timezone]||'UTC';
 const toMinute=ts=>Math.floor(new Date(ts).getTime()/60000)*60000;
 function dayKey(ts,iana){
@@ -219,11 +219,14 @@ let wPunches=[],wTO=[],wkOffset=0;
 let editAgent=null,editPunches=[],editMsg='',editingPunchId=null,editLimit=60,backTab='agents';
 let toAgent=null,toList=[],toMsg='';
 let agMsg='',adminMsg='',agEditing=null,holTxt='',holMsg='',holOk=false,holPast=false,backupMsg='';
+let toiTxt='',toiPrev=null,toiMsg='';
+let repType='week';
+let logRows=[],logDays=30,logLimit=100;
 
 function resetState(){
   me={agent:null,roles:[],isAdmin:false,isHR:false,isManager:false,isMgr:false};
   teams=[];agents=[];latest={};managers=[];holidays=[];curPunches=[];roster=[];myPunches=[];myWeek=[];myTO=[];wPunches=[];wTO=[];
-  tab='me';teamFilter='all';wkOffset=0;myTab='today';holTxt='';holMsg='';backupMsg='';
+  tab='me';teamFilter='all';wkOffset=0;myTab='today';holTxt='';holMsg='';backupMsg='';repType='week';logRows=[];toiTxt='';toiPrev=null;toiMsg='';
 }
 const teamName=id=>{const t=teams.find(x=>x.id===id);return t?t.name:'';};
 const manageable=()=>me.isAdmin?teams:teams.filter(t=>me.roles.some(r=>r.role==='manager'&&r.team_id===t.id));
@@ -258,6 +261,19 @@ async function loadWeek(){
     wTO=await fetchAll((f,t)=>sb.from('time_off').select('*').gte('date',ymd(start)).lte('date',ymd(end)).order('date').order('id').range(f,t));
   }catch(e){wPunches=[];wTO=[];alert('Could not load the report: '+errMsg(e));}
   loading=false;render();
+}
+
+async function loadLog(){
+  loading=true;render();
+  try{
+    const since=new Date(Date.now()-logDays*86400000).toISOString();
+    logRows=(await must(sb.from('punch_log').select('*').gte('at',since).order('at',{ascending:false}).limit(logLimit)))||[];
+  }catch(e){logRows=[];alert('Could not load the change log: '+errMsg(e));}
+  loading=false;render();
+}
+async function loadReport(){
+  if(repType==='log')return loadLog();
+  return loadWeek();
 }
 
 /* ---------- boot / auth ---------- */
@@ -339,7 +355,7 @@ function rMain(){
   if(!tabs.length)return userbar()+'<p class="notice">Nothing to show.</p>';
   if(!tabs.find(t=>t[0]===tab))tab=tabs[0][0];
   const bar='<div class="tab-bar">'+tabs.map(([k,l])=>'<button style="'+tabSty(k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>';
-  const body={me:rMe,team:rTeam,week:rWeek,agents:rAgents,admin:rAdmin,roster:rRoster}[tab]();
+  const body={me:rMe,team:rTeam,week:rReports,agents:rAgents,admin:rAdmin,roster:rRoster}[tab]();
   return userbar()+bar+body;
 }
 
@@ -379,7 +395,8 @@ function rMe(){
     const toRows=myTO.map(t=>'<div class="punch-row"><span><span class="badge '+(TOBADGE[t.type]||'badge-out')+'">'+esc(TOLAB[t.type]||t.type)+'</span> '+esc(t.date)+(t.note?' · '+esc(t.note):'')+'</span><span>'+esc(t.hours)+'h</span></div>').join('');
     content='<div class="card"><div class="card-title">Worked this week: '+fmtDur(tot)+'</div>'+(myWeek.length?Object.entries(byDay).map(([day,ps])=>'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;padding:6px 0 4px">'+esc(day)+'</div>'+[...ps].reverse().map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('')+'</div>').join(''):'<p class="notice">No punches this week.</p>')+'</div>'+(toRows?'<div class="card"><div class="card-title">Time off this week</div>'+toRows+'</div>':'');
   }
-  return heroClock()+'<div id="otbanner">'+alertsHtml()+'</div><div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">'+btns+'</div>')+tabs+content;
+  const tzPrompt=(a.tz_confirmed===false)?'<div class="card" style="border-color:#F5D98A;background:#FFFBEF"><div class="card-title" style="color:#7A5200">Confirm your time zone</div><p class="notice" style="text-align:left;padding:0 0 8px">Your hours and the times on your timesheet are based on this. Please pick the zone you work in.</p><div style="display:flex;gap:8px">'+tzSelect('mytz','').replace('<select id="mytz">','<select id="mytz"><option value="" selected>Choose your time zone…</option>')+'<button class="btn btn-primary" id="b-mytz">Save</button></div><div class="err" id="mytz-msg"></div></div>':'';
+  return heroClock()+tzPrompt+'<div id="otbanner">'+alertsHtml()+'</div><div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">'+btns+'</div>')+tabs+content;
 }
 function rRoster(){
   const t=me.agent&&teamName(me.agent.team_id);
@@ -429,13 +446,13 @@ function buildReport(){
     rows.push({a,ps:sorted,to,c:f.c,workedMs:f.weekMs,toBy,toH,issues});
   });
   rows.sort((x,y)=>(teamName(x.a.team_id)||'').localeCompare(teamName(y.a.team_id)||'')||x.a.name.localeCompare(y.a.name));
-  return{start,end,rows};
+  const wkS=start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const label=wkS+' – '+end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  return{start,end,rows,label,title:'Weekly Timesheet Report',csvLabel:'Week: '+wkS+' - '+end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),stamp:wkS.replace(/\s/g,'_')};
 }
-function rWeek(){
-  if(loading)return teamSelect()+'<div class="spinner"></div>';
-  const R=buildReport();
-  const fmt=d=>d.toLocaleDateString([],{month:'short',day:'numeric'});
-  const nav='<div class="week-nav"><button class="btn btn-sm btn-ghost" id="b-wp">← Prev</button><span>'+fmt(R.start)+' – '+fmt(R.end)+'</span><button class="btn btn-sm btn-ghost" id="b-wn"'+(wkOffset===0?' disabled style="opacity:0.3"':'')+'>Next →</button></div>';
+function reportBody(R){
+  const tzBad=R.rows.filter(r=>r.a.tz_confirmed===false);
+  const tzCard=tzBad.length?'<div class="alert alert-warn">ⓘ Time zone not confirmed for '+tzBad.length+' employee'+(tzBad.length>1?'s':'')+': '+esc(tzBad.map(r=>r.a.name).join(', '))+'. Their punch times may show in the wrong zone until it is confirmed (Employees, then Edit).</div>':'';
   const issueRows=[];
   R.rows.forEach(r=>r.issues.forEach(i=>issueRows.push('<div class="row-item"><div style="flex:1"><b>'+esc(r.a.name)+'</b><div style="font-size:12px;color:var(--muted)">'+esc(i.text)+'</div></div><span class="badge '+(i.kind==='open'?'badge-lunch':'badge-ot')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span></div>')));
   const exc=issueRows.length?'<div class="card"><div class="card-title">Needs attention ('+issueRows.length+')</div>'+issueRows.join('')+'</div>':'';
@@ -450,13 +467,50 @@ function rWeek(){
     const toBadges=Object.entries(r.toBy).filter(([,h])=>h>0).map(([k,h])=>'<span class="badge '+(TOBADGE[k]||'badge-out')+'" style="margin-right:3px">'+esc(TOLAB[k]||k)+' '+h+'h</span>').join('');
     const ot=r.issues.some(i=>i.kind!=='open')?'<span class="badge badge-ot" style="margin-left:4px">OT</span>':'';
     return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';flex-shrink:0">'+esc(initials(r.a.name))+'</div><div style="flex:1;min-width:100px"><div style="font-weight:500">'+esc(r.a.name)+(r.a.active?'':' <span class="badge badge-inactive">Inactive</span>')+ot+'</div>'+(teams.length>1?'<div style="font-size:11px;color:var(--muted)">'+esc(teamName(r.a.team_id))+'</div>':'')+(toBadges?'<div style="margin-top:3px">'+toBadges+'</div>':'')+'</div><div style="text-align:right;font-size:13px"><div style="font-weight:600;font-family:Sora,sans-serif">'+fmtDur(r.workedMs)+'</div></div></div>';
-  }).join('')||'<p class="notice">No data for this week.</p>';
-  return teamSelect()+nav+exc+teamSum+'<div class="card">'+rows+'</div><div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" id="b-print">Print / PDF report</button><button class="btn btn-full" id="b-export">Export CSV for payroll</button></div>';
+  }).join('')||'<p class="notice">No data for this period.</p>';
+  return tzCard+exc+teamSum+'<div class="card">'+rows+'</div>';
+}
+const reportButtons=()=>'<div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" id="b-print">Print / PDF report</button><button class="btn btn-full" id="b-export">Export CSV for payroll</button></div>';
+const currentReport=()=>buildReport();
+function repSelect(){
+  const o=[['week','Weekly timesheet'],['log','Change log']];
+  return '<select id="rt" style="margin-bottom:12px">'+o.map(([k,l])=>'<option value="'+k+'"'+(repType===k?' selected':'')+'>'+l+'</option>').join('')+'</select>';
+}
+function rReports(){return repSelect()+{week:rWeek,log:rLog}[repType]();}
+function rWeek(){
+  if(loading)return teamSelect()+'<div class="spinner"></div>';
+  const R=buildReport();
+  const fmt=d=>d.toLocaleDateString([],{month:'short',day:'numeric'});
+  const nav='<div class="week-nav"><button class="btn btn-sm btn-ghost" id="b-wp">← Prev</button><span>'+fmt(R.start)+' – '+fmt(R.end)+'</span><button class="btn btn-sm btn-ghost" id="b-wn"'+(wkOffset===0?' disabled style="opacity:0.3"':'')+'>Next →</button></div>';
+  return teamSelect()+nav+reportBody(R)+reportButtons();
+}
+
+/* ----- change log ----- */
+const SHL={shift_in:'Punch in',shift_out:'Punch out',lunch_out:'Lunch start',lunch_in:'Lunch end'};
+function logDetail(l,a){
+  const iana=tzOf(a),f=(ty,ts)=>(SHL[ty]||ty)+' '+fmtTz(ts,iana)+' on '+dayLabel(dayKey(ts,iana));
+  if(l.action==='added')return 'Added: '+f(l.new_type,l.new_time);
+  if(l.action==='deleted')return 'Deleted: '+f(l.old_type,l.old_time);
+  return f(l.old_type,l.old_time)+'  →  '+f(l.new_type,l.new_time);
+}
+const visLog=()=>logRows.filter(l=>teamFilter==='all'||l.team_id===teamFilter);
+function rLog(){
+  const sel='<select id="log-days" style="margin-bottom:12px">'+[[7,'Last 7 days'],[30,'Last 30 days'],[90,'Last 90 days'],[365,'Last year']].map(([d,l])=>'<option value="'+d+'"'+(logDays===d?' selected':'')+'>'+l+'</option>').join('')+'</select>';
+  if(loading)return teamSelect()+sel+'<div class="spinner"></div>';
+  const rows=visLog();
+  const byId={};agents.forEach(a=>{byId[a.id]=a;});
+  const list=rows.map(l=>{
+    const a=byId[l.agent_id]||{name:'Unknown',timezone:'EST'};
+    const cls=l.action==='deleted'?'badge-ot':l.action==='added'?'badge-in':'badge-lunch';
+    return '<div class="row-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:500">'+esc(a.name)+' <span class="badge '+cls+'">'+esc(l.action)+'</span></div><div style="font-size:12px;margin-top:2px">'+esc(logDetail(l,a))+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px">by '+esc(l.actor_email||'unknown')+' · '+fmtD(l.at)+' '+fmtT(l.at)+'</div></div></div>';
+  }).join('')||'<p class="notice">No changes recorded in this time frame.</p>';
+  return teamSelect()+sel+'<div class="card"><div class="card-title">Manager changes to punches ('+rows.length+')</div>'+list+(logRows.length>=logLimit?'<button class="btn btn-sm btn-full" id="b-logmore" style="margin-top:10px">Show more</button>':'')+'</div>'+(rows.length?'<button class="btn btn-full" id="b-logcsv">Export CSV</button>':'');
 }
 
 /* ----- employees list ----- */
-function tzSelect(id,sel){
-  const opts=[['EST','EST — Eastern'],['CST','CST — Central'],['MST','MST — Mountain'],['PST','PST — Pacific'],['AKST','AKST — Alaska'],['HST','HST — Hawaii']];
+function tzSelect(id,sel,unsure){
+  const opts=[['EST','EST — Eastern'],['CST','CST — Central'],['MST','MST — Mountain'],['AZ','AZ — Arizona (no daylight saving)'],['PST','PST — Pacific'],['AKST','AKST — Alaska'],['HST','HST — Hawaii']];
+  if(unsure)opts.push(['?','Not sure yet — employee will confirm']);
   return '<select id="'+id+'">'+opts.map(([v,l])=>'<option value="'+v+'"'+(v===sel?' selected':'')+'>'+l+'</option>').join('')+'</select>';
 }
 function rAgents(){
@@ -466,20 +520,113 @@ function rAgents(){
   const row=a=>{
     const c=clr(a.id),ed=canEditAgent(a);
     const delOk=ed&&!latest[a.id]&&!(session&&a.user_id===session.user.id); // never punched (and not you) = safe to delete
-    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:120px"><div style="font-weight:500">'+esc(a.name)+(a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div><div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(a.email||'No email yet')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(a.timezone||'')+(teams.length>1&&teamName(a.team_id)?' · '+esc(teamName(a.team_id)):'')+'</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">'+(ed?'<button class="btn btn-sm" data-edag="'+a.id+'" style="font-size:11px">Edit</button>':'')+'<button class="btn btn-sm" data-tob="'+a.id+'" style="font-size:11px">Time off</button><button class="btn btn-sm" data-epb="'+a.id+'" style="font-size:11px">Punches</button>'+(ed?(a.active?'<button class="btn btn-sm" data-deact="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Deactivate</button>':'<button class="btn btn-sm btn-primary" data-react="'+a.id+'" style="font-size:11px">Reactivate</button>'):'')+(delOk?'<button class="btn btn-sm" data-delag="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Delete</button>':'')+'</div></div>';
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:120px"><div style="font-weight:500">'+esc(a.name)+(a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div><div style="font-size:11px;color:var(--muted);word-break:break-all">'+esc(a.email||'No email yet')+'</div><div style="font-size:11px;color:var(--muted)">'+esc(a.timezone||'')+(a.tz_confirmed===false?' <span class="badge badge-lunch">time zone not confirmed</span>':'')+(teams.length>1&&teamName(a.team_id)?' · '+esc(teamName(a.team_id)):'')+'</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">'+(ed?'<button class="btn btn-sm" data-edag="'+a.id+'" style="font-size:11px">Edit</button>':'')+'<button class="btn btn-sm" data-tob="'+a.id+'" style="font-size:11px">Time off</button><button class="btn btn-sm" data-epb="'+a.id+'" style="font-size:11px">Punches</button>'+(ed?(a.active?'<button class="btn btn-sm" data-deact="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Deactivate</button>':'<button class="btn btn-sm btn-primary" data-react="'+a.id+'" style="font-size:11px">Reactivate</button>'):'')+(delOk?'<button class="btn btn-sm" data-delag="'+a.id+'" style="color:var(--danger);border-color:var(--danger);font-size:11px">Delete</button>':'')+'</div></div>';
   };
   let form='';
   if(mt.length){
     const defTeam=teamFilter!=='all'&&mt.find(t=>t.id===teamFilter)?teamFilter:mt[0].id;
     const teamPick=mt.length>1?'<select id="nt">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===defTeam?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
-    form='<div class="card" style="margin-bottom:12px"><div class="card-title">Add employee</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="nn" placeholder="Full name" /><input type="email" id="ne" placeholder="Work email (used to sign in)" />'+tzSelect('ntz','EST')+teamPick+'<button class="btn btn-primary" id="b-add">Add employee</button></div><div class="err" id="ae">'+esc(agMsg)+'</div></div>';
+    form='<div class="card" style="margin-bottom:12px"><div class="card-title">Add employee</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="nn" placeholder="Full name" /><input type="email" id="ne" placeholder="Work email (used to sign in)" />'+tzSelect('ntz','EST',true)+teamPick+'<button class="btn btn-primary" id="b-add">Add employee</button></div><div class="err" id="ae">'+esc(agMsg)+'</div></div>'+toiCard();
   }
   return teamSelect()+(me.isHR&&!me.isAdmin&&!me.isManager?'<p class="notice" style="padding:0 0 10px;text-align:left">HR view — you can see everything but not change it.</p>':'')+form+'<div class="card"><div class="card-title">Employees ('+act.length+' active)</div>'+(shown.length?shown.map(row).join(''):'<p class="notice">No employees yet.</p>')+(inact.length?'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);padding-top:12px;cursor:pointer"><input type="checkbox" id="show-inact" style="width:auto"'+(showInactive?' checked':'')+'> Show inactive ('+inact.length+')</label>':'')+'</div>';
 }
 function rEditAgent(){
   const a=agEditing,mt=manageable();
   const teamPick=mt.length>1?'<label class="lbl">Team</label><select id="eat">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===a.team_id?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
-  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div class="card-title">Edit employee</div><div style="display:flex;flex-direction:column;gap:8px"><label class="lbl">Name</label><input type="text" id="ean" value="'+esc(a.name)+'" /><label class="lbl">Work email</label><input type="email" id="eae" value="'+esc(a.email||'')+'" /><label class="lbl">Time zone</label>'+tzSelect('eaz',a.timezone||'EST')+teamPick+'<button class="btn btn-primary" id="b-saveag">Save</button></div><div class="err" id="eam">'+esc(agMsg)+'</div><p class="notice" style="padding:8px 0 0">Changing the email means the person signs in with the new email address.</p></div>';
+  return '<button class="btn btn-ghost btn-sm" id="b-back">← Back</button><div class="card" style="margin-top:12px"><div class="card-title">Edit employee</div><div style="display:flex;flex-direction:column;gap:8px"><label class="lbl">Name</label><input type="text" id="ean" value="'+esc(a.name)+'" /><label class="lbl">Work email</label><input type="email" id="eae" value="'+esc(a.email||'')+'" /><label class="lbl">Time zone</label>'+tzSelect('eaz',a.timezone||'EST')+'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);cursor:pointer"><input type="checkbox" id="eatc" style="width:auto"'+(a.tz_confirmed?' checked':'')+'> Time zone confirmed</label>'+teamPick+'<button class="btn btn-primary" id="b-saveag">Save</button></div><div class="err" id="eam">'+esc(agMsg)+'</div><p class="notice" style="padding:8px 0 0">Changing the email means the person signs in with the new email address.</p></div>';
+}
+
+/* ----- planned time-off import ----- */
+function splitCsvLine(line){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}
+    else if(c==='"')q=true;
+    else if(c===','||c==='\t'){out.push(cur.trim());cur='';}
+    else cur+=c;
+  }
+  out.push(cur.trim());return out;
+}
+function normDate(ds){
+  ds=String(ds||'').trim();
+  let m=ds.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/),k=null;
+  if(m)k=m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  else{m=ds.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)k=m[3]+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');}
+  if(!k)return null;
+  const d=new Date(k+'T12:00:00Z');
+  return(!isNaN(d)&&d.toISOString().slice(0,10)===k)?k:null;
+}
+function weekdaysBetween(sk,ek){
+  const out=[],e=new Date(ek+'T12:00:00Z');let d=new Date(sk+'T12:00:00Z');
+  while(d<=e&&out.length<400){const w=d.getUTCDay();if(w!==0&&w!==6)out.push(d.toISOString().slice(0,10));d.setUTCDate(d.getUTCDate()+1);}
+  return out;
+}
+function parseTimeOff(txt){
+  const rows=[],errors=[];let map=null;
+  txt.split(/\r?\n/).forEach((raw,idx)=>{
+    const line=raw.trim();if(!line)return;
+    const c=splitCsvLine(line),ln=idx+1;
+    if(idx===0&&/email/i.test(line)&&!/@/.test(line)){
+      map={};
+      c.forEach((h,i)=>{const k=h.toLowerCase().replace(/[^a-z]/g,'');
+        if(/^(workemail|employeeemail|email)$/.test(k))map.email=i;
+        else if(/^(date|dates|startdate|start)$/.test(k))map.date=i;
+        else if(/^(enddate|end)$/.test(k))map.end=i;
+        else if(/^(hours|hoursperday|duration)$/.test(k))map.hours=i;
+        else if(/^(type|timeofftype|category)$/.test(k))map.type=i;
+        else if(/^(note|notes|reason|comment|comments)$/.test(k))map.note=i;});
+      if(map.email==null||map.date==null){errors.push({line:1,msg:'The header row needs an "Email" column and a "Date" column.'});map=null;}
+      return;
+    }
+    const col=(name,pos)=>String(map?(map[name]!=null?c[map[name]]:''):(pos!=null?c[pos]:'')||'').trim();
+    const email=col('email',0).toLowerCase();
+    let ds=col('date',1),es=map?col('end'):'';
+    const rg=ds.match(/^(.+?)\s+(?:to|through|thru)\s+(.+)$/i);
+    if(rg){ds=rg[1];es=rg[2];}
+    const hStr=col('hours',2).replace(/\s*h(ours?)?$/i,'');
+    const tStr=col('type',3),note=col('note',4);
+    if(!validEmail(email)){errors.push({line:ln,msg:'No valid email on this line.'});return;}
+    const agent=agents.find(a=>(a.email||'')===email);
+    if(!agent){errors.push({line:ln,msg:email+' is not an employee on your teams.'});return;}
+    const sk=normDate(ds);
+    if(!sk){errors.push({line:ln,msg:'Date not understood: "'+ds+'" (use 2026-12-24 or 12/24/2026).'});return;}
+    let days=[sk];
+    if(es){const ek=normDate(es);if(!ek||ek<sk){errors.push({line:ln,msg:'End date not understood or earlier than the start date.'});return;}
+      days=weekdaysBetween(sk,ek);if(!days.length){errors.push({line:ln,msg:'That range has no weekdays.'});return;}
+      if(days.length>60){errors.push({line:ln,msg:'Please keep each range to 60 weekdays or fewer.'});return;}}
+    let hours=8;
+    if(hStr){hours=Number(hStr);if(!(hours>0&&hours<=24)){errors.push({line:ln,msg:'Hours must be a number between 0 and 24.'});return;}}
+    let type='pto';
+    if(tStr){if(/sick/i.test(tStr))type='sick';else if(/pto|vacation|personal|time off|annual|leave/i.test(tStr))type='pto';else{errors.push({line:ln,msg:'Type "'+tStr+'" not understood — use PTO or Sick.'});return;}}
+    days.forEach(d=>rows.push({line:ln,agent,date:d,hours,type,note}));
+  });
+  if(rows.length>2000){errors.push({line:0,msg:'That is more than 2000 days — please split the list.'});rows.length=0;}
+  return{rows,errors};
+}
+async function callTimeOffImport(apply){
+  const payload=toiPrev.rows.map(r=>({agent_id:r.agent.id,date:r.date,hours:r.hours,type:r.type,note:r.note||null}));
+  return await must(sb.rpc('import_time_off',{p_rows:payload,p_apply:apply}));
+}
+function toiPreviewHtml(){
+  if(!toiPrev)return'';
+  const P=toiPrev,R=P.res;
+  let h='<div id="toi-prev" style="margin-top:12px">';
+  if(P.errors.length)h+='<div class="alert alert-warn" style="margin-bottom:8px"><b>Could not read '+P.errors.length+' line'+(P.errors.length>1?'s':'')+'</b> (skipped):'+P.errors.slice(0,8).map(e=>'<div style="font-size:12px">• '+(e.line?'Line '+e.line+': ':'')+esc(e.msg)+'</div>').join('')+(P.errors.length>8?'<div style="font-size:12px">…and '+(P.errors.length-8)+' more</div>':'')+'</div>';
+  if(R){
+    const all=R.rows.map((x,i)=>({x,r:P.rows[i]}));
+    const bad=all.filter(o=>o.x.status!=='new'),nw=all.filter(o=>o.x.status==='new');
+    const lbl={duplicate:'Already recorded — skipped',conflict:'Needs a manual look — skipped',denied:'Not allowed',missing:'Employee not found',invalid:'Invalid'};
+    h+='<div class="card-title" style="margin:6px 0">'+(R.applied?'Imported':'Preview')+'</div><div style="font-size:13px;margin-bottom:8px"><b>'+R.new+'</b> '+(R.applied?'added':'new')+' · <b>'+R.duplicate+'</b> already recorded · <b>'+R.conflict+'</b> conflict'+(R.conflict===1?'':'s')+(R.problems?' · <b>'+R.problems+'</b> problem'+(R.problems===1?'':'s'):'')+'</div>';
+    if(!R.applied&&nw.length)h+=nw.slice(0,8).map(o=>'<div class="punch-row"><span>'+esc(o.r.agent.name)+' · '+esc(o.r.date)+'</span><span>'+esc(o.r.hours)+'h '+(o.r.type==='sick'?'Sick':'PTO')+'</span></div>').join('')+(nw.length>8?'<div class="notice" style="padding:6px 0">…and '+(nw.length-8)+' more</div>':'');
+    if(bad.length)h+='<div style="margin-top:8px;font-size:12px"><b>Not added:</b>'+bad.slice(0,15).map(o=>'<div style="color:var(--muted)">• Line '+o.r.line+' — '+esc(o.r.agent.name)+' '+esc(o.r.date)+': '+esc(lbl[o.x.status]||o.x.status)+(o.x.detail&&o.x.status!=='duplicate'?' ('+esc(o.x.detail)+')':'')+'</div>').join('')+(bad.length>15?'<div style="color:var(--muted)">…and '+(bad.length-15)+' more</div>':'')+'</div>';
+    if(!R.applied&&R.new>0)h+='<button class="btn btn-primary btn-full" id="b-toimp" style="margin-top:12px">Import '+R.new+' new entr'+(R.new===1?'y':'ies')+'</button>';
+    if(!R.applied&&R.new===0)h+='<p class="notice" style="padding:8px 0 0">Nothing new to add.</p>';
+  }
+  return h+'</div>';
+}
+function toiCard(){
+  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Import planned time off</div><p class="notice" style="text-align:left;padding:0 0 8px">One line per person: <b>email, date, hours, type, note</b> (hours default to 8, type to PTO). For a vacation use a range like <b>2026-12-21 to 2026-12-24</b> — weekends are skipped. Re-importing the same list never creates duplicates.</p><textarea id="toi-txt" rows="6" placeholder="ana@nymblsystems.com, 2026-12-24, 8, PTO, Family trip&#10;ana@nymblsystems.com, 2026-12-28 to 2026-12-31, 8, PTO">'+esc(toiTxt)+'</textarea><div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap"><label class="btn btn-sm" for="toi-file" style="cursor:pointer">Upload CSV</label><input type="file" id="toi-file" accept=".csv,.txt" style="display:none"><button class="btn btn-primary btn-sm" id="b-toprev">Preview</button></div><div class="err" id="toi-msg">'+esc(toiMsg)+'</div>'+toiPreviewHtml()+'<p class="notice" style="text-align:left;padding:8px 0 0">Last-minute changes: use <b>Time off</b> on any employee below to add a single day.</p></div>';
 }
 
 /* ----- admin ----- */
@@ -583,12 +730,19 @@ appEl.addEventListener('change',async e=>{
   if(t.id==='tf'){teamFilter=t.value==='all'?'all':Number(t.value);render();}
   if(t.id==='show-inact'){showInactive=t.checked;render();}
   if(t.id==='hol-past'){holPast=t.checked;}
+  if(t.id==='eaz'){const cb=document.getElementById('eatc');if(cb)cb.checked=true;}
+  if(t.id==='toi-file'&&t.files&&t.files[0]){toiTxt=await t.files[0].text();toiPrev=null;toiMsg='File loaded — click Preview to check it.';render();return;}
+  if(t.id==='rt'){repType=t.value;await guard(loadReport);return;}
+  if(t.id==='log-days'){logDays=Number(t.value);logLimit=100;await guard(loadLog);return;}
   if(t.id==='hol-file'&&t.files&&t.files[0]){
     const txt=await t.files[0].text();
     holTxt=txt;holMsg='File loaded — check the list, then click Import.';holOk=true;render();
   }
 });
-appEl.addEventListener('input',e=>{if(e.target.id==='hol-txt')holTxt=e.target.value;});
+appEl.addEventListener('input',e=>{
+  if(e.target.id==='hol-txt')holTxt=e.target.value;
+  if(e.target.id==='toi-txt'){toiTxt=e.target.value;toiPrev=null;const p=document.getElementById('toi-prev');if(p)p.remove();}
+});
 appEl.addEventListener('click',async e=>{
   const t=e.target;
   const punchB=t.closest('[data-punch]');
@@ -601,7 +755,7 @@ appEl.addEventListener('click',async e=>{
   const tabB=t.closest('[data-tab]');
   if(tabB){
     tab=tabB.dataset.tab;
-    if(tab==='week'){await guard(loadWeek);return;}
+    if(tab==='week'){await guard(loadReport);return;}
     if(tab==='team'){await guard(async()=>{await loadMgrData();await loadCurWeek();});}
     if(tab==='agents'||tab==='admin'){await guard(loadMgrData);}
     if(tab==='me'){await guard(loadMine);}
@@ -684,23 +838,45 @@ appEl.addEventListener('click',async e=>{
     render();
   }
   else if(bid==='b-more'){editLimit+=60;await guard(refreshEdit);render();}
+  else if(bid==='b-logmore'){logLimit+=100;await guard(loadLog);}
+  else if(bid==='b-logcsv'){exportLogCSV();}
+  else if(bid==='b-mytz'){
+    const tz=val('mytz');const m=()=>document.getElementById('mytz-msg');
+    if(!tz){m().textContent='Please choose your time zone.';return;}
+    try{await must(sb.rpc('set_my_timezone',{p_tz:tz}));me.agent.timezone=tz;me.agent.tz_confirmed=true;}catch(ex){m().textContent=errMsg(ex);return;}
+    render();
+  }
+  else if(bid==='b-toprev'){
+    toiTxt=val('toi-txt');
+    const P=parseTimeOff(toiTxt);toiPrev={rows:P.rows,errors:P.errors,res:null};toiMsg='';
+    if(P.rows.length){try{toiPrev.res=await callTimeOffImport(false);}catch(ex){toiMsg=errMsg(ex);}}
+    else if(!P.errors.length)toiMsg='Paste or upload a list first.';
+    render();
+  }
+  else if(bid==='b-toimp'){
+    if(!toiPrev||!toiPrev.res)return;
+    if(!confirm('Add '+toiPrev.res.new+' time-off '+(toiPrev.res.new===1?'entry':'entries')+'?'))return;
+    try{toiPrev.res=await callTimeOffImport(true);toiTxt='';toiMsg='';}catch(ex){toiMsg=errMsg(ex);}
+    render();
+  }
   else if(bid==='b-wp'){wkOffset--;await loadWeek();}
   else if(bid==='b-wn'){if(wkOffset<0){wkOffset++;await loadWeek();}}
   else if(bid==='b-export'){exportCSV();}
   else if(bid==='b-print'){printReport();}
   else if(bid==='b-add'){
-    const name=val('nn').trim(),email=val('ne').trim().toLowerCase(),tz=val('ntz');
+    const name=val('nn').trim(),email=val('ne').trim().toLowerCase(),tzRaw=val('ntz');
+    const tz=tzRaw==='?'?'EST':tzRaw,tzConf=tzRaw!=='?';
     const mt=manageable();
     const team_id=document.getElementById('nt')?Number(val('nt')):(teamFilter!=='all'&&mt.find(x=>x.id===teamFilter)?teamFilter:(mt[0]&&mt[0].id));
     if(!name){agMsg='Enter a name.';render();return;}
     if(!validEmail(email)){agMsg='Enter a valid work email.';render();return;}
     if(!team_id){agMsg='No team available to add to.';render();return;}
-    try{await must(sb.from('agents').insert({name,email,timezone:tz,team_id}));agMsg='';await loadMgrData();}catch(ex){agMsg=errMsg(ex);}
+    try{await must(sb.from('agents').insert({name,email,timezone:tz,tz_confirmed:tzConf,team_id}));agMsg='';await loadMgrData();}catch(ex){agMsg=errMsg(ex);}
     render();
   }
   else if(bid==='b-saveag'){
     const name=val('ean').trim(),email=val('eae').trim().toLowerCase(),tz=val('eaz');
-    const upd={name,email:email||null,timezone:tz};
+    const upd={name,email:email||null,timezone:tz,tz_confirmed:!!(document.getElementById('eatc')&&document.getElementById('eatc').checked)};
     if(document.getElementById('eat'))upd.team_id=Number(val('eat'));
     if(!name){agMsg='Enter a name.';render();return;}
     if(email&&!validEmail(email)){agMsg='Enter a valid email.';render();return;}
@@ -716,7 +892,11 @@ appEl.addEventListener('click',async e=>{
   else if(bid==='b-ato'){
     const type=val('tot'),date=val('tod'),hours=val('toh'),note=val('ton').trim();
     if(!date||!hours){toMsg='Fill in date and hours.';render();return;}
-    try{await must(sb.from('time_off').insert({agent_id:toAgent.id,team_id:toAgent.team_id,date,type,hours:Number(hours),note:note||null}));toList=(await getTO(toAgent.id))||[];toMsg='Added!';}catch(ex){toMsg='Error: '+errMsg(ex);}
+    try{
+      const dup=await must(sb.from('time_off').select('id').eq('agent_id',toAgent.id).eq('date',date).eq('type',type).eq('hours',Number(hours)));
+      if(dup&&dup.length){toMsg='That entry is already recorded for this day.';render();return;}
+      await must(sb.from('time_off').insert({agent_id:toAgent.id,team_id:toAgent.team_id,date,type,hours:Number(hours),note:note||null}));toList=(await getTO(toAgent.id))||[];toMsg='Added!';
+    }catch(ex){toMsg='Error: '+errMsg(ex);}
     render();
   }
   else if(bid==='b-addteam'){
@@ -752,26 +932,28 @@ appEl.addEventListener('click',async e=>{
   }
 });
 
-/* ---------- CSV export for payroll (same layout as the original timeclock) ---------- */
+/* ---------- downloads ---------- */
+function downloadText(name,text,mime){
+  const link=document.createElement('a');
+  link.href='data:'+(mime||'text/csv')+';charset=utf-8,'+encodeURIComponent('\ufeff'+text);
+  link.download=name;document.body.appendChild(link);link.click();link.remove();
+}
+const csvQ=s=>{s=String(s==null?'':s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
+
+/* CSV for payroll (same layout as the original timeclock) */
 function exportCSV(){
-  const{start,end}=getWeekRange(wkOffset);
-  const wk=start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  const weekLabel=wk+' - '+end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  const grouped={};
-  vis().forEach(a=>{grouped[a.id]={name:a.name,tz:a.timezone||'',events:[],to:[]};});
-  wPunches.forEach(p=>{if(grouped[p.agent_id])grouped[p.agent_id].events.push(p);});
-  wTO.forEach(x=>{if(grouped[x.agent_id])grouped[x.agent_id].to.push(x);});
+  const R=currentReport();
+  const grouped=R.rows.map(r=>({name:r.a.name,tz:r.a.timezone||'',events:r.ps,to:r.to}));
   const msToHrs=ms=>Math.round(ms/36000)/100;
   const fmt2=n=>n>0?n.toFixed(2):'';
   const agentFmt=(tz,ts,opts)=>new Intl.DateTimeFormat('en-US',{timeZone:TZ_IANA[tz]||'UTC',...opts}).format(new Date(ts));
   const PUNCH_LABEL={shift_in:'Punch In',shift_out:'Punch Out',lunch_out:'Lunch Out',lunch_in:'Lunch In'};
-  // quote a cell; neutralise leading = + - @ so spreadsheets never run typed text as a formula
-  const q=s=>{s=String(s);if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
+  const q=csvQ;
   let csv='Nymbl Timeclock Report\n';
-  csv+='"Week: '+weekLabel+'"\n';
+  csv+='"'+R.csvLabel+'"\n';
   csv+='\n';
   csv+='Agent,Timezone,Date,Punch Type,Time,Hours Worked,Time Off Type,Time Off Hours,Note,Grand Total\n';
-  Object.values(grouped).forEach(g=>{
+  grouped.forEach(g=>{
     if(!g.events.length&&!g.to.length)return;
     let workedHrsWeek=0,toHrsWeek=0;
     const agentDay=ts=>agentFmt(g.tz,ts,{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$1-$2');
@@ -802,61 +984,22 @@ function exportCSV(){
       csv+=',"","Daily Total","","",'+q(fmt2(dayWorkedHrs))+','+q(toLabels)+','+q(dayToHrs>0?dayToHrs.toFixed(2):'')+','+q(toNotes)+',""\n';
     });
     const grandTotal=workedHrsWeek+toHrsWeek;
-    csv+=',"","WEEK TOTAL","","",'+q(fmt2(workedHrsWeek))+',"",'+q(toHrsWeek>0?toHrsWeek.toFixed(2):'')+',"",'+q(fmt2(grandTotal))+'\n';
+    csv+=',"","'+'WEEK TOTAL'+'","","",'+q(fmt2(workedHrsWeek))+',"",'+q(toHrsWeek>0?toHrsWeek.toFixed(2):'')+',"",'+q(fmt2(grandTotal))+'\n';
     csv+='\n';
   });
   const tn=teamFilter!=='all'?'_'+teamName(teamFilter).replace(/[^a-z0-9]+/gi,'_'):'';
-  const link=document.createElement('a');
-  link.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\ufeff'+csv);
-  link.download='nymbl_timeclock'+tn+'_'+wk.replace(/\s/g,'_')+'.csv';
-  link.click();
+  downloadText('nymbl_timeclock'+tn+'_'+R.stamp+'.csv',csv);
+}
+function exportLogCSV(){
+  const byId={};agents.forEach(a=>{byId[a.id]=a;});
+  let csv='Nymbl Timeclock - Punch Change Log\n\nWhen,Changed by,Employee,Team,Action,Detail\n';
+  visLog().forEach(l=>{const a=byId[l.agent_id]||{name:'Unknown',timezone:'EST'};
+    csv+=[csvQ(new Date(l.at).toLocaleString('en-US')),csvQ(l.actor_email),csvQ(a.name),csvQ(teamName(l.team_id)),csvQ(l.action),csvQ(logDetail(l,a))].join(',')+'\n';});
+  downloadText('nymbl_punch_change_log.csv',csv);
 }
 
-/* ---------- polished printable report ---------- */
-function printReport(){
-  const R=buildReport();
-  const fmtShort=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  const range=fmtShort(R.start)+' – '+R.end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  const scope=teamFilter==='all'?(teams.length>1?'All teams':(teams[0]?teams[0].name:'')):teamName(teamFilter);
-  const gen=new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
-  const logo=(document.querySelector('.logo-wrap img')||{}).src||'';
-  let totW=0,totT=0,flagN=0;
-  R.rows.forEach(r=>{totW+=r.workedMs;totT+=r.toH;flagN+=r.issues.length;});
-  const issues=[];R.rows.forEach(r=>r.issues.forEach(i=>issues.push({r,i})));
-  // summary rows
-  const sumRows=R.rows.map(r=>{
-    const f=r.issues.some(i=>i.kind!=='open'),m=r.issues.some(i=>i.kind==='open');
-    return '<tr><td><b>'+esc(r.a.name)+'</b>'+(r.a.active?'':' <span class="tag">inactive</span>')+'</td><td>'+esc(teamName(r.a.team_id))+'</td><td class="n">'+hrs2(r.workedMs)+'</td><td class="n">'+(r.toBy.pto||'–')+'</td><td class="n">'+(r.toBy.sick||'–')+'</td><td class="n">'+(r.toBy.holiday||'–')+'</td><td class="n"><b>'+(Number(hrs2(r.workedMs))+r.toH).toFixed(2)+'</b></td><td>'+(f?'<span class="pill red">Overtime</span> ':'')+(m?'<span class="pill amber">Missing punch</span>':'')+'</td></tr>';
-  }).join('');
-  const sumTotals='<tr class="tot"><td colspan="2">Total</td><td class="n">'+hrs2(totW)+'</td><td class="n" colspan="3">'+totT.toFixed(2)+' off</td><td class="n">'+(Number(hrs2(totW))+totT).toFixed(2)+'</td><td></td></tr>';
-  // team summary
-  let teamTbl='';
-  if(teams.length>1){
-    const g={};R.rows.forEach(r=>{const n=teamName(r.a.team_id)||'—';const o=g[n]=g[n]||{n:0,w:0,t:0,f:0};o.n++;o.w+=r.workedMs;o.t+=r.toH;o.f+=r.issues.length;});
-    const names=Object.keys(g).sort();
-    if(names.length>1)teamTbl='<h2>By team</h2><table><thead><tr><th>Team</th><th class="n">Employees</th><th class="n">Worked</th><th class="n">Time off</th><th class="n">Flags</th></tr></thead><tbody>'+names.map(n=>'<tr><td><b>'+esc(n)+'</b></td><td class="n">'+g[n].n+'</td><td class="n">'+hrs2(g[n].w)+'</td><td class="n">'+g[n].t.toFixed(2)+'</td><td class="n">'+(g[n].f||'–')+'</td></tr>').join('')+'</tbody></table>';
-  }
-  const excTbl=issues.length?'<h2>Needs attention</h2><table><thead><tr><th>Employee</th><th>Team</th><th>Issue</th></tr></thead><tbody>'+issues.map(({r,i})=>'<tr><td><b>'+esc(r.a.name)+'</b></td><td>'+esc(teamName(r.a.team_id))+'</td><td><span class="pill '+(i.kind==='open'?'amber':'red')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span> '+esc(i.text)+'</td></tr>').join('')+'</tbody></table>':'';
-  // detail
-  const detail=R.rows.map(r=>{
-    const iana=tzOf(r.a);
-    const byDay={};
-    r.ps.forEach(p=>{const d=dayKey(p.punched_at,iana);(byDay[d]=byDay[d]||{ps:[],to:[]}).ps.push(p);});
-    r.to.forEach(t=>{const d=String(t.date);(byDay[d]=byDay[d]||{ps:[],to:[]}).to.push(t);});
-    const rows=Object.keys(byDay).sort().map(d=>{
-      const o=byDay[d],ms=r.c.byDay[d]||0,over=ms>DAILY_LIMIT*HOUR;
-      const parts=[];
-      for(let k=0;k<o.ps.length;k++){const p=o.ps[k],tm=fmtTz(p.punched_at,iana);
-        if(p.type==='shift_in')parts.push('In '+tm);
-        else if(p.type==='shift_out')parts.push('Out '+tm);
-        else if(p.type==='lunch_out'){const n=o.ps[k+1];if(n&&n.type==='lunch_in'){parts.push('Lunch '+tm+' – '+fmtTz(n.punched_at,iana));k++;}else parts.push('Lunch out '+tm);}
-        else parts.push('Lunch in '+tm);}
-      const toTxt=o.to.map(t=>(TOLAB[t.type]||t.type)+' '+t.hours+'h'+(t.note?' ('+esc(t.note)+')':'')).join(', ');
-      return '<tr><td class="day">'+esc(dayLabel(d))+'</td><td>'+(parts.length?esc(parts.join('  ·  ')):'<span class="muted">—</span>')+'</td><td class="n'+(over?' redtxt':'')+'">'+(o.ps.length?hrs2(ms)+(over?' OT':''):'–')+'</td><td>'+(toTxt||'')+'</td></tr>';
-    }).join('');
-    return '<div class="emp"><div class="emp-h"><div><b>'+esc(r.a.name)+'</b><span class="muted"> · '+esc(teamName(r.a.team_id))+' · '+esc(r.a.timezone||'')+'</span></div><div>Worked <b>'+hrs2(r.workedMs)+'</b>'+(r.toH?' &nbsp;+&nbsp; Off <b>'+r.toH.toFixed(2)+'</b>':'')+'</div></div><table class="dt"><thead><tr><th style="width:62px">Day</th><th>Punches</th><th class="n" style="width:64px">Hours</th><th style="width:130px">Time off</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-  }).join('');
-  const css=`@page{size:Letter;margin:0.55in 0.55in 0.65in;@bottom-left{content:"Nymbl Timeclock · Confidential";font:8px Inter,Arial,sans-serif;color:#7B6FA8}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:8px Inter,Arial,sans-serif;color:#7B6FA8}}
+/* ---------- polished printable reports ---------- */
+const PRINT_CSS=`@page{size:Letter;margin:0.55in 0.55in 0.65in;@bottom-left{content:"Nymbl Timeclock · Confidential";font:8px Inter,Arial,sans-serif;color:#7B6FA8}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:8px Inter,Arial,sans-serif;color:#7B6FA8}}
 *{box-sizing:border-box}body{font-family:Inter,Arial,Helvetica,sans-serif;color:#07051E;font-size:10.5px;line-height:1.4;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fff}
 .bar{position:sticky;top:0;background:#26045E;color:#fff;padding:10px 18px;display:flex;gap:14px;align-items:center;font-size:13px}.bar button{background:#7748FF;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
 .page{max-width:7.4in;margin:0 auto;padding:18px}
@@ -867,27 +1010,65 @@ function printReport(){
 h2{font-family:Sora,Inter,Arial,sans-serif;font-size:12.5px;color:#26045E;margin:18px 0 6px;padding-bottom:3px;border-bottom:1px solid #E2DAFF}
 table{width:100%;border-collapse:collapse}th{background:#26045E;color:#fff;text-align:left;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:6px 7px}td{padding:5px 7px;border-bottom:1px solid #EFEBFF;vertical-align:top}
 tbody tr:nth-child(even) td{background:#FAF8FF}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.n{text-align:right}
-tr.tot td{border-top:2px solid #26045E;background:#F0EEFF!important;font-weight:700}thead{display:table-header-group}tr{break-inside:avoid}
+tr.tot td{border-top:2px solid #26045E;background:#F0EEFF!important;font-weight:700}tr.sub td{background:#EDE8FF!important;font-weight:700}thead{display:table-header-group}tr{break-inside:avoid}
 .pill{display:inline-block;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600}.pill.red{background:#FFE3E3;color:#B42318}.pill.amber{background:#FEF0C7;color:#93370D}
 .tag{font-size:8.5px;background:#EEE;color:#666;border-radius:8px;padding:1px 5px}.muted{color:#7B6FA8}.redtxt{color:#B42318;font-weight:700}
 .emp{break-inside:avoid;margin:0 0 12px}.emp-h{display:flex;justify-content:space-between;align-items:baseline;background:#F0EEFF;border-left:4px solid #7748FF;padding:6px 9px;font-size:11px}
 .dt th{background:#EDE8FF;color:#26045E}.day{white-space:nowrap;font-weight:600}
 .sign{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:34px;break-inside:avoid}.sign div{border-top:1px solid #07051E;padding-top:4px;font-size:9.5px;color:#7B6FA8}
 @media print{.bar{display:none}.page{padding:0;max-width:none}}`;
-  const html='<!doctype html><html><head><meta charset="utf-8"><title>Nymbl Timesheet Report — '+esc(range)+'</title><link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"><style>'+css+'</style></head><body><div class="bar"><span>Use <b>Print</b>, then choose <b>Save as PDF</b> to keep a copy.</span><button onclick="window.print()">Print / Save as PDF</button></div><div class="page">'
-  +'<div class="head"><div>'+(logo?'<img src="'+logo+'" alt="Nymbl">':'<b>Nymbl</b>')+'</div><div><h1>Weekly Timesheet Report</h1><div class="sub">'+esc(range)+' &nbsp;·&nbsp; '+esc(scope)+'</div></div></div>'
-  +'<div class="kpis"><div class="kpi"><b>'+R.rows.length+'</b><span>Employees with activity</span></div><div class="kpi"><b>'+hrs2(totW)+'</b><span>Hours worked</span></div><div class="kpi"><b>'+totT.toFixed(2)+'</b><span>Time-off hours</span></div><div class="kpi'+(flagN?' warn':'')+'"><b>'+flagN+'</b><span>Flags (overtime / missing punch)</span></div></div>'
-  +'<div class="muted" style="font-size:9.5px">Generated '+esc(gen)+' by '+esc(session.user.email)+'. Overtime flag: over '+DAILY_LIMIT+' hours in a day or '+WEEKLY_LIMIT+' hours in a week (time off not counted). Overtime requires prior management approval.</div>'
-  +excTbl+teamTbl
-  +'<h2>Employee summary</h2><table><thead><tr><th>Employee</th><th>Team</th><th class="n">Worked</th><th class="n">PTO</th><th class="n">Sick</th><th class="n">Holiday</th><th class="n">Total</th><th>Flags</th></tr></thead><tbody>'+(sumRows||'<tr><td colspan="8" class="muted">No activity this week.</td></tr>')+sumTotals+'</tbody></table>'
-  +'<h2>Daily detail</h2>'+(detail||'<p class="muted">No activity this week.</p>')
-  +'<div class="sign"><div>Manager approval &nbsp;&nbsp;&nbsp;&nbsp; Date</div><div>Payroll / HR review &nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>'
-  +'</div></body></html>';
+function openPrintDoc(title,sub,body){
+  const logo=(document.querySelector('.logo-wrap img')||{}).src||'';
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>Nymbl '+esc(title)+' — '+esc(sub)+'</title><link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"><style>'+PRINT_CSS+'</style></head><body><div class="bar"><span>Use <b>Print</b>, then choose <b>Save as PDF</b> to keep a copy.</span><button onclick="window.print()">Print / Save as PDF</button></div><div class="page"><div class="head"><div>'+(logo?'<img src="'+logo+'" alt="Nymbl">':'<b>Nymbl</b>')+'</div><div><h1>'+esc(title)+'</h1><div class="sub">'+esc(sub)+'</div></div></div>'+body+'</div></body></html>';
   const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
   const w=window.open(url,'_blank');
   if(!w)alert('Your browser blocked the report window. Allow pop-ups for this site and try again.');
 }
+const scopeText=()=>teamFilter==='all'?(teams.length>1?'All teams':(teams[0]?teams[0].name:'')):teamName(teamFilter);
+const genText=()=>new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
 
+function printReport(){
+  const R=currentReport();
+  let totW=0,totT=0,flagN=0;
+  R.rows.forEach(r=>{totW+=r.workedMs;totT+=r.toH;flagN+=r.issues.length;});
+  const issues=[];R.rows.forEach(r=>r.issues.forEach(i=>issues.push({r,i})));
+  const sumRows=R.rows.map(r=>{
+    const f=r.issues.some(i=>i.kind!=='open'),m=r.issues.some(i=>i.kind==='open');
+    return '<tr><td><b>'+esc(r.a.name)+'</b>'+(r.a.active?'':' <span class="tag">inactive</span>')+'</td><td>'+esc(teamName(r.a.team_id))+'</td><td class="n">'+hrs2(r.workedMs)+'</td><td class="n">'+(r.toBy.pto||'–')+'</td><td class="n">'+(r.toBy.sick||'–')+'</td><td class="n">'+(r.toBy.holiday||'–')+'</td><td class="n"><b>'+(Number(hrs2(r.workedMs))+r.toH).toFixed(2)+'</b></td><td>'+(f?'<span class="pill red">Overtime</span> ':'')+(m?'<span class="pill amber">Missing punch</span>':'')+'</td></tr>';
+  }).join('');
+  const sumTotals='<tr class="tot"><td colspan="2">Total</td><td class="n">'+hrs2(totW)+'</td><td class="n" colspan="3">'+totT.toFixed(2)+' off</td><td class="n">'+(Number(hrs2(totW))+totT).toFixed(2)+'</td><td></td></tr>';
+  let teamTbl='';
+  if(teams.length>1){
+    const g={};R.rows.forEach(r=>{const n=teamName(r.a.team_id)||'—';const o=g[n]=g[n]||{n:0,w:0,t:0,f:0};o.n++;o.w+=r.workedMs;o.t+=r.toH;o.f+=r.issues.length;});
+    const names=Object.keys(g).sort();
+    if(names.length>1)teamTbl='<h2>By team</h2><table><thead><tr><th>Team</th><th class="n">Employees</th><th class="n">Worked</th><th class="n">Time off</th><th class="n">Flags</th></tr></thead><tbody>'+names.map(n=>'<tr><td><b>'+esc(n)+'</b></td><td class="n">'+g[n].n+'</td><td class="n">'+hrs2(g[n].w)+'</td><td class="n">'+g[n].t.toFixed(2)+'</td><td class="n">'+(g[n].f||'–')+'</td></tr>').join('')+'</tbody></table>';
+  }
+  const excTbl=issues.length?'<h2>Needs attention</h2><table><thead><tr><th>Employee</th><th>Team</th><th>Issue</th></tr></thead><tbody>'+issues.map(({r,i})=>'<tr><td><b>'+esc(r.a.name)+'</b></td><td>'+esc(teamName(r.a.team_id))+'</td><td><span class="pill '+(i.kind==='open'?'amber':'red')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span> '+esc(i.text)+'</td></tr>').join('')+'</tbody></table>':'';
+  const detail=R.rows.map(r=>{
+    const iana=tzOf(r.a),byDay={};
+    r.ps.forEach(p=>{const d=dayKey(p.punched_at,iana);(byDay[d]=byDay[d]||{ps:[],to:[]}).ps.push(p);});
+    r.to.forEach(t=>{const d=String(t.date);(byDay[d]=byDay[d]||{ps:[],to:[]}).to.push(t);});
+    const rows=Object.keys(byDay).sort().map(d=>{
+      const o=byDay[d],ms=r.c.byDay[d]||0,over=ms>DAILY_LIMIT*HOUR,parts=[];
+      for(let k=0;k<o.ps.length;k++){const p=o.ps[k],tm=fmtTz(p.punched_at,iana);
+        if(p.type==='shift_in')parts.push('In '+tm);
+        else if(p.type==='shift_out')parts.push('Out '+tm);
+        else if(p.type==='lunch_out'){const n=o.ps[k+1];if(n&&n.type==='lunch_in'){parts.push('Lunch '+tm+' – '+fmtTz(n.punched_at,iana));k++;}else parts.push('Lunch out '+tm);}
+        else parts.push('Lunch in '+tm);}
+      const toTxt=o.to.map(t=>esc(TOLAB[t.type]||t.type)+' '+esc(t.hours)+'h'+(t.note?' ('+esc(t.note)+')':'')).join(', ');
+      return '<tr><td class="day">'+esc(dayLabel(d))+'</td><td>'+(parts.length?esc(parts.join('  ·  ')):'<span class="muted">—</span>')+'</td><td class="n'+(over?' redtxt':'')+'">'+(o.ps.length?hrs2(ms)+(over?' OT':''):'–')+'</td><td>'+toTxt+'</td></tr>';
+    }).join('');
+    return '<div class="emp"><div class="emp-h"><div><b>'+esc(r.a.name)+'</b><span class="muted"> · '+esc(teamName(r.a.team_id))+' · '+esc(r.a.timezone||'')+'</span></div><div>Worked <b>'+hrs2(r.workedMs)+'</b>'+(r.toH?' &nbsp;+&nbsp; Off <b>'+r.toH.toFixed(2)+'</b>':'')+'</div></div><table class="dt"><thead><tr><th style="width:62px">Day</th><th>Punches</th><th class="n" style="width:64px">Hours</th><th style="width:130px">Time off</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }).join('');
+  const body='<div class="kpis"><div class="kpi"><b>'+R.rows.length+'</b><span>Employees with activity</span></div><div class="kpi"><b>'+hrs2(totW)+'</b><span>Hours worked</span></div><div class="kpi"><b>'+totT.toFixed(2)+'</b><span>Time-off hours</span></div><div class="kpi'+(flagN?' warn':'')+'"><b>'+flagN+'</b><span>Flags (overtime / missing punch)</span></div></div>'
+  +'<div class="muted" style="font-size:9.5px">Generated '+esc(genText())+' by '+esc(session.user.email)+'. Overtime flag: over '+DAILY_LIMIT+' hours in a day or '+WEEKLY_LIMIT+' hours in a week (time off not counted). Overtime requires prior management approval.</div>'
+  +(R.rows.some(r=>r.a.tz_confirmed===false)?'<div class="muted" style="font-size:9.5px;color:#93370D">Note: time zone is not yet confirmed for '+R.rows.filter(r=>r.a.tz_confirmed===false).map(r=>esc(r.a.name)).join(', ')+'; their punch times may display in the wrong zone.</div>':'')
+  +excTbl+teamTbl
+  +'<h2>Employee summary</h2><table><thead><tr><th>Employee</th><th>Team</th><th class="n">Worked</th><th class="n">PTO</th><th class="n">Sick</th><th class="n">Holiday</th><th class="n">Total</th><th>Flags</th></tr></thead><tbody>'+(sumRows||'<tr><td colspan="8" class="muted">No activity in this period.</td></tr>')+sumTotals+'</tbody></table>'
+  +'<h2>Daily detail</h2>'+(detail||'<p class="muted">No activity in this period.</p>')
+  +'<div class="sign"><div>Manager approval &nbsp;&nbsp;&nbsp;&nbsp; Date</div><div>Payroll / HR review &nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>';
+  openPrintDoc(R.title,R.label+' · '+scopeText(),body);
+}
 /* ---------- clock + live alerts ---------- */
 function updateClock(){
   const now=new Date(),t=document.getElementById('lt'),d=document.getElementById('ld');
