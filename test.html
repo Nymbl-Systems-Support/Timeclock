@@ -90,6 +90,7 @@ select option{background:var(--surface2);}
 .week-nav span{font-size:13px;font-weight:500;color:var(--text);}
 .hero-card{background:#FFFFFF;border:1px solid #E2DAFF;border-radius:var(--radius);padding:1.5rem;margin-bottom:12px;text-align:center;}
 
+.container{width:100%;max-width:var(--w,480px);}
 .userbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px;}
 .userbar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .badge-inactive{background:rgba(139,135,176,0.15);color:var(--muted);}
@@ -101,7 +102,21 @@ textarea:focus{border-color:var(--accent);}
 .alert-over{background:#FFE9E9;border:1px solid #FFB4B4;color:#8A1C1C;}
 .alert-warn{background:#FFF6DC;border:1px solid #F5D98A;color:#7A5200;}
 .stale{margin-top:4px;font-size:12px;color:#8A1C1C;background:#FFE9E9;border-radius:8px;padding:5px 8px;}
-.h-over{color:#B42318;font-weight:700;}.h-warn{color:#B76E00;font-weight:600;}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.btnrow .btn-full{width:auto;flex:1 1 240px;}
+select#rt,select#tf,select#log-days{max-width:340px;margin-right:10px;}
+.cols{display:grid;grid-template-columns:1fr;column-gap:40px;}
+.pair{display:grid;grid-template-columns:1fr;gap:12px;}
+.pair .card{margin-bottom:0;}
+.split{display:grid;grid-template-columns:1fr;gap:16px;align-items:start;}
+.admin-grid{display:grid;grid-template-columns:1fr;gap:12px;align-items:start;}
+@media(min-width:900px){
+  .cols{grid-template-columns:1fr 1fr;}
+  .pair{grid-template-columns:1fr 1fr;margin-bottom:12px;}
+  .split{grid-template-columns:minmax(0,5fr) minmax(0,7fr);}
+  .admin-grid{grid-template-columns:1fr 1fr;}
+  .stat-grid{max-width:640px;}
+}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 </style>
 </head>
@@ -123,8 +138,6 @@ const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 const sb=window.supabase.createClient(SURL,SKEY,{auth:{flowType:'pkce',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 
 /* ---------- policy settings (change here) ---------- */
-const DAILY_LIMIT=8, WEEKLY_LIMIT=40;     // hours; over these = overtime flag
-const DAILY_WARN=7, WEEKLY_WARN=38;       // hours; heads-up shown from here
 const STALE_HOURS=12;                      // still clocked in this long after last punch = forgot to punch out
 const HOUR=3600000;
 
@@ -187,12 +200,7 @@ function dayCalc(punches,iana,nowMs){
   });
   return{byDay:res,total};
 }
-function flagsFor(a,punches,nowMs){
-  const c=dayCalc(punches,tzOf(a),nowMs);
-  const dayOver=Object.entries(c.byDay).filter(([,ms])=>ms>DAILY_LIMIT*HOUR).map(([d,ms])=>({day:d,ms}));
-  return{c,dayOver,weekOver:c.total>WEEKLY_LIMIT*HOUR,weekMs:c.total};
-}
-const lvl=(h,warn,lim)=>h>lim?'over':h>=warn?'warn':'';
+function flagsFor(a,punches,nowMs){const c=dayCalc(punches,tzOf(a),nowMs);return{c,weekMs:c.total};}
 function errMsg(e){
   const m=(e&&e.message)?e.message:String(e);
   if(e&&e.code==='23505')return 'That entry already exists (the email or name is already in use).';
@@ -212,7 +220,7 @@ const getTO=id=>must(sb.from('time_off').select('*').eq('agent_id',id).order('da
 
 /* ---------- state ---------- */
 let view='loading',session=null,me={agent:null,roles:[],isAdmin:false,isHR:false,isManager:false,isMgr:false};
-let teams=[],agents=[],latest={},managers=[],holidays=[],curPunches=[],roster=[];
+let teams=[],agents=[],latest={},managers=[],holidays=[],curPunches=[];
 let tab='me',teamFilter='all',showInactive=false,loading=false,loginErr='';
 let myPunches=[],myWeek=[],myTO=[],myTab='today';
 let wPunches=[],wTO=[],wkOffset=0;
@@ -225,7 +233,7 @@ let logRows=[],logDays=30,logLimit=100;
 
 function resetState(){
   me={agent:null,roles:[],isAdmin:false,isHR:false,isManager:false,isMgr:false};
-  teams=[];agents=[];latest={};managers=[];holidays=[];curPunches=[];roster=[];myPunches=[];myWeek=[];myTO=[];wPunches=[];wTO=[];
+  teams=[];agents=[];latest={};managers=[];holidays=[];curPunches=[];myPunches=[];myWeek=[];myTO=[];wPunches=[];wTO=[];
   tab='me';teamFilter='all';wkOffset=0;myTab='today';holTxt='';holMsg='';backupMsg='';repType='week';logRows=[];toiTxt='';toiPrev=null;toiMsg='';
 }
 const teamName=id=>{const t=teams.find(x=>x.id===id);return t?t.name:'';};
@@ -306,15 +314,22 @@ async function enter(){
     if(!me.isMgr&&me.agent&&!me.agent.active){view='inactive';render();return;}
     const isEmp=!!(me.agent&&me.agent.active);
     if(me.isMgr){await loadMgrData();await loadCurWeek();}
-    if(isEmp){await loadMine();if(!me.isMgr)roster=(await must(sb.rpc('team_roster')))||[];}
+    if(isEmp)await loadMine();
     tab=isEmp?'me':'team';
     view='main';render();
   }catch(e){loginErr='Could not load your account: '+errMsg(e);view='error';render();}
 }
 
 /* ---------- views ---------- */
+function pageWidth(){
+  if(['login','loading','error','noaccess','inactive'].includes(view))return '480px';
+  if(view==='main'&&!me.isMgr)return '720px';
+  if(['edit-punches','time-off','edit-agent'].includes(view))return '780px';
+  return '1060px';
+}
 function render(){
   const f={loading:rLoading,login:rLogin,noaccess:rNoAccess,inactive:rInactive,error:rError,main:rMain,'edit-punches':rEditPunches,'time-off':rTimeOff,'edit-agent':rEditAgent}[view]||rLoading;
+  document.querySelector('.container').style.setProperty('--w',pageWidth());
   document.getElementById('app').innerHTML=f();
   updateClock();
 }
@@ -342,7 +357,6 @@ function tabsFor(){
   const t=[];
   if(me.agent&&me.agent.active)t.push(['me','My time']);
   if(me.isMgr){t.push(['team','Team'],['week','Reports'],['agents','Employees']);if(me.isAdmin)t.push(['admin','Admin']);}
-  else if(me.agent&&me.agent.active)t.push(['roster','My team']);
   return t;
 }
 const tabSty=k=>'padding:9px 12px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:'+(tab===k?'var(--text)':'var(--muted)')+';border-bottom:2px solid '+(tab===k?'var(--accent)':'transparent')+';margin-bottom:-1px;font-family:Inter,sans-serif;';
@@ -355,21 +369,14 @@ function rMain(){
   if(!tabs.length)return userbar()+'<p class="notice">Nothing to show.</p>';
   if(!tabs.find(t=>t[0]===tab))tab=tabs[0][0];
   const bar='<div class="tab-bar">'+tabs.map(([k,l])=>'<button style="'+tabSty(k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>';
-  const body={me:rMe,team:rTeam,week:rReports,agents:rAgents,admin:rAdmin,roster:rRoster}[tab]();
-  return userbar()+bar+body;
+  const body={me:rMe,team:rTeam,week:rReports,agents:rAgents,admin:rAdmin}[tab]();
+  return userbar()+(tabs.length>1?bar:'')+body;
 }
 
 /* ----- employee: alerts ----- */
 function myAlerts(){
   const a=me.agent;if(!a)return[];
-  const now=Date.now(),iana=tzOf(a),c=dayCalc(myWeek,iana,now);
-  const todayMs=c.byDay[dayKey(now,iana)]||0,out=[];
-  const tH=todayMs/HOUR,wH=c.total/HOUR;
-  const ot='Overtime is not allowed without prior approval from management.';
-  if(tH>DAILY_LIMIT)out.push(['over','You are over '+DAILY_LIMIT+' hours today ('+fmtDur(todayMs)+'). '+ot+' Please clock out or check with your manager.']);
-  else if(tH>=DAILY_WARN)out.push(['warn','Heads up: you have worked '+fmtDur(todayMs)+' today. '+ot]);
-  if(wH>WEEKLY_LIMIT)out.push(['over','You are over '+WEEKLY_LIMIT+' hours this week ('+fmtDur(c.total)+'). '+ot]);
-  else if(wH>=WEEKLY_WARN)out.push(['warn','Heads up: you have worked '+fmtDur(c.total)+' this week. '+ot]);
+  const now=Date.now(),out=[];
   const lp=myPunches[0];
   if(lp&&statusOf(lp)!=='out'&&now-new Date(lp.punched_at).getTime()>STALE_HOURS*HOUR)
     out.push(['over','Your last punch was '+fmtD(lp.punched_at)+' at '+fmtT(lp.punched_at)+' and you are still clocked in. If you forgot to punch out, tell your manager so the time can be corrected.']);
@@ -396,14 +403,8 @@ function rMe(){
     content='<div class="card"><div class="card-title">Worked this week: '+fmtDur(tot)+'</div>'+(myWeek.length?Object.entries(byDay).map(([day,ps])=>'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;padding:6px 0 4px">'+esc(day)+'</div>'+[...ps].reverse().map(p=>'<div class="punch-row"><span>'+PL[p.type]+'</span><span>'+fmtT(p.punched_at)+'</span></div>').join('')+'</div>').join(''):'<p class="notice">No punches this week.</p>')+'</div>'+(toRows?'<div class="card"><div class="card-title">Time off this week</div>'+toRows+'</div>':'');
   }
   const tzPrompt=(a.tz_confirmed===false)?'<div class="card" style="border-color:#F5D98A;background:#FFFBEF"><div class="card-title" style="color:#7A5200">Confirm your time zone</div><p class="notice" style="text-align:left;padding:0 0 8px">Your hours and the times on your timesheet are based on this. Please pick the zone you work in.</p><div style="display:flex;gap:8px">'+tzSelect('mytz','').replace('<select id="mytz">','<select id="mytz"><option value="" selected>Choose your time zone…</option>')+'<button class="btn btn-primary" id="b-mytz">Save</button></div><div class="err" id="mytz-msg"></div></div>':'';
-  return heroClock()+tzPrompt+'<div id="otbanner">'+alertsHtml()+'</div><div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">'+btns+'</div>')+tabs+content;
+  return heroClock()+tzPrompt+'<div id="otbanner">'+alertsHtml()+'</div><div class="card" style="text-align:center"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';margin:0 auto 12px;width:52px;height:52px;font-size:16px">'+esc(initials(a.name))+'</div><div style="font-size:18px;font-weight:600;font-family:Sora,sans-serif">'+esc(a.name)+'</div>'+(teamName(a.team_id)?'<div style="font-size:12px;color:var(--muted);margin-top:2px">'+esc(teamName(a.team_id))+'</div>':'')+'<div style="margin-top:8px"><span class="badge '+cls+'">'+lb+'</span></div></div>'+(loading?'<div class="spinner"></div>':'<div class="btnrow">'+btns+'</div>')+tabs+content;
 }
-function rRoster(){
-  const t=me.agent&&teamName(me.agent.team_id);
-  const rows=roster.length?roster.map(r=>{const c=clr(r.id);return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(r.name))+'</div><div style="flex:1;font-weight:500">'+esc(r.name)+'</div></div>';}).join(''):'<p class="notice">No one else on your team yet.</p>';
-  return '<div class="card"><div class="card-title">'+esc(t||'My team')+' · active members</div>'+rows+'</div>';
-}
-
 /* ----- team board ----- */
 function rTeam(){
   const list=vis().filter(a=>a.active).sort((x,y)=>x.name.localeCompare(y.name));
@@ -414,16 +415,14 @@ function rTeam(){
     const lp=latest[a.id],s=statusOf(lp);if(s!=='out')clocked++;
     const f=flagsFor(a,by[a.id]||[],now);
     const tH=(f.c.byDay[dayKey(now,tzOf(a))]||0)/HOUR,wH=f.weekMs/HOUR;
-    const ld=lvl(tH,DAILY_WARN,DAILY_LIMIT),lw=lvl(wH,WEEKLY_WARN,WEEKLY_LIMIT);
     const stale=s!=='out'&&lp&&(now-new Date(lp.punched_at).getTime())>STALE_HOURS*HOUR;
-    if(ld==='over'||lw==='over'||stale)alerts++;
+    if(stale)alerts++;
     const c=clr(a.id),[lb,cls]=statusLabel(s);
-    const hrsLine='<div style="font-size:11px;color:var(--muted)">Today <span class="h-'+ld+'">'+tH.toFixed(1)+'h</span> · Week <span class="h-'+lw+'">'+wH.toFixed(1)+'h</span>'+(lp?' · '+fmtD(lp.punched_at)+' '+fmtT(lp.punched_at):'')+'</div>';
-    const flags=(ld==='over'?'<span class="badge badge-ot">Over '+DAILY_LIMIT+'h today</span> ':'')+(lw==='over'?'<span class="badge badge-ot">Over '+WEEKLY_LIMIT+'h week</span> ':'');
+    const hrsLine='<div style="font-size:11px;color:var(--muted)">Today '+tH.toFixed(1)+'h · Week '+wH.toFixed(1)+'h'+(lp?' · '+fmtD(lp.punched_at)+' '+fmtT(lp.punched_at):'')+'</div>';
     const staleHtml=stale?'<div class="stale">⚠ Still clocked in since '+fmtD(lp.punched_at)+' '+fmtT(lp.punched_at)+' — forgot to punch out?'+(canEditAgent(a)?' <button class="btn btn-sm" data-fix="'+a.id+'" style="font-size:11px;padding:3px 8px">Fix</button>':'')+'</div>':'';
-    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:110px"><div style="font-weight:500">'+esc(a.name)+'</div>'+hrsLine+(flags?'<div style="margin-top:3px">'+flags+'</div>':'')+staleHtml+'</div><span class="badge '+cls+'">'+lb+'</span></div>';
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+'">'+esc(initials(a.name))+'</div><div style="flex:1;min-width:110px"><div style="font-weight:500">'+esc(a.name)+'</div>'+hrsLine+staleHtml+'</div><span class="badge '+cls+'">'+lb+'</span></div>';
   }).join('')||'<p class="notice">No active employees.</p>';
-  return teamSelect()+'<div class="stat-grid"><div class="stat"><div class="stat-val">'+list.length+'</div><div class="stat-label">Employees</div></div><div class="stat"><div class="stat-val" style="color:#7748FF">'+clocked+'</div><div class="stat-label">Clocked in</div></div><div class="stat"><div class="stat-val"'+(alerts?' style="color:#FF5959"':'')+'>'+alerts+'</div><div class="stat-label">Alerts</div></div></div><div class="card">'+rows+'</div>';
+  return teamSelect()+'<div class="stat-grid"><div class="stat"><div class="stat-val">'+list.length+'</div><div class="stat-label">Employees</div></div><div class="stat"><div class="stat-val" style="color:#7748FF">'+clocked+'</div><div class="stat-label">Clocked in</div></div><div class="stat"><div class="stat-val"'+(alerts?' style="color:#FF5959"':'')+'>'+alerts+'</div><div class="stat-label">Missing punch</div></div></div><div class="card"><div class="cols">'+rows+'</div></div>';
 }
 
 /* ----- reports ----- */
@@ -437,8 +436,6 @@ function buildReport(){
     const toBy={pto:0,sick:0,holiday:0};to.forEach(t=>{toBy[t.type]=(toBy[t.type]||0)+Number(t.hours);});
     const toH=Object.values(toBy).reduce((x,y)=>x+y,0);
     const issues=[];
-    f.dayOver.forEach(d=>issues.push({kind:'day',text:'Over '+DAILY_LIMIT+'h on '+dayLabel(d.day)+' ('+fmtDur(d.ms)+')'}));
-    if(f.weekOver)issues.push({kind:'week',text:'Over '+WEEKLY_LIMIT+'h for the week ('+fmtDur(f.weekMs)+')'});
     const sorted=ps.slice().sort((x,y)=>new Date(x.punched_at)-new Date(y.punched_at));
     const lp=sorted[sorted.length-1];
     if(lp&&statusOf(lp)!=='out'&&(past||Date.now()-new Date(lp.punched_at).getTime()>STALE_HOURS*HOUR))
@@ -454,23 +451,22 @@ function reportBody(R){
   const tzBad=R.rows.filter(r=>r.a.tz_confirmed===false);
   const tzCard=tzBad.length?'<div class="alert alert-warn">ⓘ Time zone not confirmed for '+tzBad.length+' employee'+(tzBad.length>1?'s':'')+': '+esc(tzBad.map(r=>r.a.name).join(', '))+'. Their punch times may show in the wrong zone until it is confirmed (Employees, then Edit).</div>':'';
   const issueRows=[];
-  R.rows.forEach(r=>r.issues.forEach(i=>issueRows.push('<div class="row-item"><div style="flex:1"><b>'+esc(r.a.name)+'</b><div style="font-size:12px;color:var(--muted)">'+esc(i.text)+'</div></div><span class="badge '+(i.kind==='open'?'badge-lunch':'badge-ot')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span></div>')));
+  R.rows.forEach(r=>r.issues.forEach(i=>issueRows.push('<div class="row-item"><div style="flex:1"><b>'+esc(r.a.name)+'</b><div style="font-size:12px;color:var(--muted)">'+esc(i.text)+'</div></div><span class="badge badge-lunch">Missing punch</span></div>')));
   const exc=issueRows.length?'<div class="card"><div class="card-title">Needs attention ('+issueRows.length+')</div>'+issueRows.join('')+'</div>':'';
   let teamSum='';
   if(teams.length>1){
     const g={};R.rows.forEach(r=>{const n=teamName(r.a.team_id)||'—';const o=g[n]=g[n]||{n:0,w:0,t:0,f:0};o.n++;o.w+=r.workedMs;o.t+=r.toH;o.f+=r.issues.length;});
     const names=Object.keys(g).sort();
-    if(names.length>1)teamSum='<div class="card"><div class="card-title">By team</div>'+names.map(n=>'<div class="row-item"><div style="flex:1;font-weight:500">'+esc(n)+'<div style="font-size:11px;color:var(--muted)">'+g[n].n+' employee'+(g[n].n===1?'':'s')+(g[n].f?' · '+g[n].f+' flag'+(g[n].f>1?'s':''):'')+'</div></div><div style="text-align:right;font-size:13px"><b style="font-family:Sora,sans-serif">'+fmtDur(g[n].w)+'</b>'+(g[n].t?'<div style="font-size:11px;color:var(--muted)">+'+g[n].t+'h off</div>':'')+'</div></div>').join('')+'</div>';
+    if(names.length>1)teamSum='<div class="card"><div class="card-title">By team</div>'+names.map(n=>'<div class="row-item"><div style="flex:1;font-weight:500">'+esc(n)+'<div style="font-size:11px;color:var(--muted)">'+g[n].n+' employee'+(g[n].n===1?'':'s')+(g[n].f?' · '+g[n].f+' missing punch'+(g[n].f>1?'es':''):'')+'</div></div><div style="text-align:right;font-size:13px"><b style="font-family:Sora,sans-serif">'+fmtDur(g[n].w)+'</b>'+(g[n].t?'<div style="font-size:11px;color:var(--muted)">+'+g[n].t+'h off</div>':'')+'</div></div>').join('')+'</div>';
   }
   const rows=R.rows.map(r=>{
     const c=clr(r.a.id);
     const toBadges=Object.entries(r.toBy).filter(([,h])=>h>0).map(([k,h])=>'<span class="badge '+(TOBADGE[k]||'badge-out')+'" style="margin-right:3px">'+esc(TOLAB[k]||k)+' '+h+'h</span>').join('');
-    const ot=r.issues.some(i=>i.kind!=='open')?'<span class="badge badge-ot" style="margin-left:4px">OT</span>':'';
-    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';flex-shrink:0">'+esc(initials(r.a.name))+'</div><div style="flex:1;min-width:100px"><div style="font-weight:500">'+esc(r.a.name)+(r.a.active?'':' <span class="badge badge-inactive">Inactive</span>')+ot+'</div>'+(teams.length>1?'<div style="font-size:11px;color:var(--muted)">'+esc(teamName(r.a.team_id))+'</div>':'')+(toBadges?'<div style="margin-top:3px">'+toBadges+'</div>':'')+'</div><div style="text-align:right;font-size:13px"><div style="font-weight:600;font-family:Sora,sans-serif">'+fmtDur(r.workedMs)+'</div></div></div>';
+    return '<div class="week-row"><div class="avatar" style="background:'+c.bg+';color:'+c.text+';flex-shrink:0">'+esc(initials(r.a.name))+'</div><div style="flex:1;min-width:100px"><div style="font-weight:500">'+esc(r.a.name)+(r.a.active?'':' <span class="badge badge-inactive">Inactive</span>')+'</div>'+(teams.length>1?'<div style="font-size:11px;color:var(--muted)">'+esc(teamName(r.a.team_id))+'</div>':'')+(toBadges?'<div style="margin-top:3px">'+toBadges+'</div>':'')+'</div><div style="text-align:right;font-size:13px"><div style="font-weight:600;font-family:Sora,sans-serif">'+fmtDur(r.workedMs)+'</div></div></div>';
   }).join('')||'<p class="notice">No data for this period.</p>';
-  return tzCard+exc+teamSum+'<div class="card">'+rows+'</div>';
+  return tzCard+((exc&&teamSum)?'<div class="pair">'+exc+teamSum+'</div>':exc+teamSum)+'<div class="card"><div class="cols">'+rows+'</div></div>';
 }
-const reportButtons=()=>'<div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-full" id="b-print">Print / PDF report</button><button class="btn btn-full" id="b-export">Export CSV for payroll</button></div>';
+const reportButtons=()=>'<div class="btnrow"><button class="btn btn-primary btn-full" id="b-print">Print / PDF report</button><button class="btn btn-full" id="b-export">Export CSV for payroll</button></div>';
 const currentReport=()=>buildReport();
 function repSelect(){
   const o=[['week','Weekly timesheet'],['log','Change log']];
@@ -528,7 +524,8 @@ function rAgents(){
     const teamPick=mt.length>1?'<select id="nt">'+mt.map(t=>'<option value="'+t.id+'"'+(t.id===defTeam?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select>':'';
     form='<div class="card" style="margin-bottom:12px"><div class="card-title">Add employee</div><div style="display:flex;flex-direction:column;gap:8px"><input type="text" id="nn" placeholder="Full name" /><input type="email" id="ne" placeholder="Work email (used to sign in)" />'+tzSelect('ntz','EST',true)+teamPick+'<button class="btn btn-primary" id="b-add">Add employee</button></div><div class="err" id="ae">'+esc(agMsg)+'</div></div>'+toiCard();
   }
-  return teamSelect()+(me.isHR&&!me.isAdmin&&!me.isManager?'<p class="notice" style="padding:0 0 10px;text-align:left">HR view — you can see everything but not change it.</p>':'')+form+'<div class="card"><div class="card-title">Employees ('+act.length+' active)</div>'+(shown.length?shown.map(row).join(''):'<p class="notice">No employees yet.</p>')+(inact.length?'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);padding-top:12px;cursor:pointer"><input type="checkbox" id="show-inact" style="width:auto"'+(showInactive?' checked':'')+'> Show inactive ('+inact.length+')</label>':'')+'</div>';
+  const listCard='<div class="card"><div class="card-title">Employees ('+act.length+' active)</div>'+(shown.length?shown.map(row).join(''):'<p class="notice">No employees yet.</p>')+(inact.length?'<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);padding-top:12px;cursor:pointer"><input type="checkbox" id="show-inact" style="width:auto"'+(showInactive?' checked':'')+'> Show inactive ('+inact.length+')</label>':'')+'</div>';
+  return teamSelect()+(me.isHR&&!me.isAdmin&&!me.isManager?'<p class="notice" style="padding:0 0 10px;text-align:left">HR view — you can see everything but not change it.</p>':'')+(form?'<div class="split"><div>'+form+'</div><div>'+listCard+'</div></div>':listCard);
 }
 function rEditAgent(){
   const a=agEditing,mt=manageable();
@@ -645,10 +642,10 @@ function rAdmin(){
   const yr=new Date().getFullYear();
   const yrOpts=[yr,yr+1].map(y=>'<option value="'+y+'">'+y+'</option>').join('');
   const hol=holidays.length?holidays.map(h=>'<div class="row-item"><div style="flex:1"><span style="font-weight:500">'+esc(h.name)+'</span><div style="font-size:11px;color:var(--muted)">'+esc(h.date)+' · '+esc(h.hours)+'h</div></div><button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-rmhol="'+h.id+'">Remove</button></div>').join(''):'<p class="notice">No holidays yet.</p>';
-  return '<div class="card" style="margin-bottom:12px"><div class="card-title">Teams</div>'+tl+'<div style="display:flex;gap:8px;margin-top:12px"><input type="text" id="ntn" placeholder="New team name" /><button class="btn btn-primary" id="b-addteam">Add</button></div></div>'
+  return '<div class="admin-grid"><div class="card" style="margin-bottom:12px"><div class="card-title">Teams</div>'+tl+'<div style="display:flex;gap:8px;margin-top:12px"><input type="text" id="ntn" placeholder="New team name" /><button class="btn btn-primary" id="b-addteam">Add</button></div></div>'
   +'<div class="card" style="margin-bottom:12px"><div class="card-title">Managers, HR and admins</div>'+mg+'<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px"><input type="email" id="nme" placeholder="Work email" /><select id="nms">'+scopeOpts+'</select><button class="btn btn-primary" id="b-addmgr">Add person</button></div><div class="err" id="adm">'+esc(adminMsg)+'</div></div>'
   +'<div class="card" style="margin-bottom:12px"><div class="card-title">Company holidays</div><p class="notice" style="text-align:left;padding:0 0 8px">One holiday per line: <b>date, name, hours</b> (hours optional, default 8). Importing adds the time off to every active employee automatically, and to anyone hired later.</p><textarea id="hol-txt" rows="7" placeholder="2026-12-25, Christmas Day, 8">'+esc(holTxt)+'</textarea><div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;align-items:center"><select id="hol-year" style="width:auto">'+yrOpts+'</select><button class="btn btn-sm" id="b-hsug">Suggest US holidays</button><label class="btn btn-sm" for="hol-file" style="cursor:pointer">Upload CSV</label><input type="file" id="hol-file" accept=".csv,.txt" style="display:none"></div><label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px;cursor:pointer"><input type="checkbox" id="hol-past" style="width:auto"'+(holPast?' checked':'')+'> Also add holidays that have already passed</label><button class="btn btn-primary btn-full" id="b-himport">Import holidays</button><div class="'+(holOk?'ok':'err')+'" id="hol-msg">'+esc(holMsg)+'</div><div style="margin-top:8px">'+hol+'</div></div>'
-  +'<div class="card"><div class="card-title">Backup</div><p class="notice" style="text-align:left;padding:0 0 10px">Downloads everything (employees, punches, time off, teams, holidays) as one file. Store it somewhere private — it contains employee emails and hours.</p><button class="btn btn-full" id="b-backup">Download backup</button><div class="ok" id="bk-msg">'+esc(backupMsg)+'</div></div>';
+  +'<div class="card"><div class="card-title">Backup</div><p class="notice" style="text-align:left;padding:0 0 10px">Downloads everything (employees, punches, time off, teams, holidays) as one file. Store it somewhere private — it contains employee emails and hours.</p><button class="btn btn-full" id="b-backup">Download backup</button><div class="ok" id="bk-msg">'+esc(backupMsg)+'</div></div></div>';
 }
 
 /* ----- punches / time off views ----- */
@@ -1033,38 +1030,38 @@ function printReport(){
   R.rows.forEach(r=>{totW+=r.workedMs;totT+=r.toH;flagN+=r.issues.length;});
   const issues=[];R.rows.forEach(r=>r.issues.forEach(i=>issues.push({r,i})));
   const sumRows=R.rows.map(r=>{
-    const f=r.issues.some(i=>i.kind!=='open'),m=r.issues.some(i=>i.kind==='open');
-    return '<tr><td><b>'+esc(r.a.name)+'</b>'+(r.a.active?'':' <span class="tag">inactive</span>')+'</td><td>'+esc(teamName(r.a.team_id))+'</td><td class="n">'+hrs2(r.workedMs)+'</td><td class="n">'+(r.toBy.pto||'–')+'</td><td class="n">'+(r.toBy.sick||'–')+'</td><td class="n">'+(r.toBy.holiday||'–')+'</td><td class="n"><b>'+(Number(hrs2(r.workedMs))+r.toH).toFixed(2)+'</b></td><td>'+(f?'<span class="pill red">Overtime</span> ':'')+(m?'<span class="pill amber">Missing punch</span>':'')+'</td></tr>';
+    const m=r.issues.length>0;
+    return '<tr><td><b>'+esc(r.a.name)+'</b>'+(r.a.active?'':' <span class="tag">inactive</span>')+'</td><td>'+esc(teamName(r.a.team_id))+'</td><td class="n">'+hrs2(r.workedMs)+'</td><td class="n">'+(r.toBy.pto||'–')+'</td><td class="n">'+(r.toBy.sick||'–')+'</td><td class="n">'+(r.toBy.holiday||'–')+'</td><td class="n"><b>'+(Number(hrs2(r.workedMs))+r.toH).toFixed(2)+'</b></td><td>'+(m?'<span class="pill amber">Missing punch</span>':'')+'</td></tr>';
   }).join('');
   const sumTotals='<tr class="tot"><td colspan="2">Total</td><td class="n">'+hrs2(totW)+'</td><td class="n" colspan="3">'+totT.toFixed(2)+' off</td><td class="n">'+(Number(hrs2(totW))+totT).toFixed(2)+'</td><td></td></tr>';
   let teamTbl='';
   if(teams.length>1){
     const g={};R.rows.forEach(r=>{const n=teamName(r.a.team_id)||'—';const o=g[n]=g[n]||{n:0,w:0,t:0,f:0};o.n++;o.w+=r.workedMs;o.t+=r.toH;o.f+=r.issues.length;});
     const names=Object.keys(g).sort();
-    if(names.length>1)teamTbl='<h2>By team</h2><table><thead><tr><th>Team</th><th class="n">Employees</th><th class="n">Worked</th><th class="n">Time off</th><th class="n">Flags</th></tr></thead><tbody>'+names.map(n=>'<tr><td><b>'+esc(n)+'</b></td><td class="n">'+g[n].n+'</td><td class="n">'+hrs2(g[n].w)+'</td><td class="n">'+g[n].t.toFixed(2)+'</td><td class="n">'+(g[n].f||'–')+'</td></tr>').join('')+'</tbody></table>';
+    if(names.length>1)teamTbl='<h2>By team</h2><table><thead><tr><th>Team</th><th class="n">Employees</th><th class="n">Worked</th><th class="n">Time off</th><th class="n">Missing punch</th></tr></thead><tbody>'+names.map(n=>'<tr><td><b>'+esc(n)+'</b></td><td class="n">'+g[n].n+'</td><td class="n">'+hrs2(g[n].w)+'</td><td class="n">'+g[n].t.toFixed(2)+'</td><td class="n">'+(g[n].f||'–')+'</td></tr>').join('')+'</tbody></table>';
   }
-  const excTbl=issues.length?'<h2>Needs attention</h2><table><thead><tr><th>Employee</th><th>Team</th><th>Issue</th></tr></thead><tbody>'+issues.map(({r,i})=>'<tr><td><b>'+esc(r.a.name)+'</b></td><td>'+esc(teamName(r.a.team_id))+'</td><td><span class="pill '+(i.kind==='open'?'amber':'red')+'">'+(i.kind==='open'?'Missing punch':'Overtime')+'</span> '+esc(i.text)+'</td></tr>').join('')+'</tbody></table>':'';
+  const excTbl=issues.length?'<h2>Needs attention</h2><table><thead><tr><th>Employee</th><th>Team</th><th>Issue</th></tr></thead><tbody>'+issues.map(({r,i})=>'<tr><td><b>'+esc(r.a.name)+'</b></td><td>'+esc(teamName(r.a.team_id))+'</td><td><span class="pill amber">Missing punch</span> '+esc(i.text)+'</td></tr>').join('')+'</tbody></table>':'';
   const detail=R.rows.map(r=>{
     const iana=tzOf(r.a),byDay={};
     r.ps.forEach(p=>{const d=dayKey(p.punched_at,iana);(byDay[d]=byDay[d]||{ps:[],to:[]}).ps.push(p);});
     r.to.forEach(t=>{const d=String(t.date);(byDay[d]=byDay[d]||{ps:[],to:[]}).to.push(t);});
     const rows=Object.keys(byDay).sort().map(d=>{
-      const o=byDay[d],ms=r.c.byDay[d]||0,over=ms>DAILY_LIMIT*HOUR,parts=[];
+      const o=byDay[d],ms=r.c.byDay[d]||0,parts=[];
       for(let k=0;k<o.ps.length;k++){const p=o.ps[k],tm=fmtTz(p.punched_at,iana);
         if(p.type==='shift_in')parts.push('In '+tm);
         else if(p.type==='shift_out')parts.push('Out '+tm);
         else if(p.type==='lunch_out'){const n=o.ps[k+1];if(n&&n.type==='lunch_in'){parts.push('Lunch '+tm+' – '+fmtTz(n.punched_at,iana));k++;}else parts.push('Lunch out '+tm);}
         else parts.push('Lunch in '+tm);}
       const toTxt=o.to.map(t=>esc(TOLAB[t.type]||t.type)+' '+esc(t.hours)+'h'+(t.note?' ('+esc(t.note)+')':'')).join(', ');
-      return '<tr><td class="day">'+esc(dayLabel(d))+'</td><td>'+(parts.length?esc(parts.join('  ·  ')):'<span class="muted">—</span>')+'</td><td class="n'+(over?' redtxt':'')+'">'+(o.ps.length?hrs2(ms)+(over?' OT':''):'–')+'</td><td>'+toTxt+'</td></tr>';
+      return '<tr><td class="day">'+esc(dayLabel(d))+'</td><td>'+(parts.length?esc(parts.join('  ·  ')):'<span class="muted">—</span>')+'</td><td class="n">'+(o.ps.length?hrs2(ms):'–')+'</td><td>'+toTxt+'</td></tr>';
     }).join('');
     return '<div class="emp"><div class="emp-h"><div><b>'+esc(r.a.name)+'</b><span class="muted"> · '+esc(teamName(r.a.team_id))+' · '+esc(r.a.timezone||'')+'</span></div><div>Worked <b>'+hrs2(r.workedMs)+'</b>'+(r.toH?' &nbsp;+&nbsp; Off <b>'+r.toH.toFixed(2)+'</b>':'')+'</div></div><table class="dt"><thead><tr><th style="width:62px">Day</th><th>Punches</th><th class="n" style="width:64px">Hours</th><th style="width:130px">Time off</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }).join('');
-  const body='<div class="kpis"><div class="kpi"><b>'+R.rows.length+'</b><span>Employees with activity</span></div><div class="kpi"><b>'+hrs2(totW)+'</b><span>Hours worked</span></div><div class="kpi"><b>'+totT.toFixed(2)+'</b><span>Time-off hours</span></div><div class="kpi'+(flagN?' warn':'')+'"><b>'+flagN+'</b><span>Flags (overtime / missing punch)</span></div></div>'
-  +'<div class="muted" style="font-size:9.5px">Generated '+esc(genText())+' by '+esc(session.user.email)+'. Overtime flag: over '+DAILY_LIMIT+' hours in a day or '+WEEKLY_LIMIT+' hours in a week (time off not counted). Overtime requires prior management approval.</div>'
+  const body='<div class="kpis"><div class="kpi"><b>'+R.rows.length+'</b><span>Employees with activity</span></div><div class="kpi"><b>'+hrs2(totW)+'</b><span>Hours worked</span></div><div class="kpi"><b>'+totT.toFixed(2)+'</b><span>Time-off hours</span></div><div class="kpi'+(flagN?' warn':'')+'"><b>'+flagN+'</b><span>Missing punch-outs</span></div></div>'
+  +'<div class="muted" style="font-size:9.5px">Generated '+esc(genText())+' by '+esc(session.user.email)+'.</div>'
   +(R.rows.some(r=>r.a.tz_confirmed===false)?'<div class="muted" style="font-size:9.5px;color:#93370D">Note: time zone is not yet confirmed for '+R.rows.filter(r=>r.a.tz_confirmed===false).map(r=>esc(r.a.name)).join(', ')+'; their punch times may display in the wrong zone.</div>':'')
   +excTbl+teamTbl
-  +'<h2>Employee summary</h2><table><thead><tr><th>Employee</th><th>Team</th><th class="n">Worked</th><th class="n">PTO</th><th class="n">Sick</th><th class="n">Holiday</th><th class="n">Total</th><th>Flags</th></tr></thead><tbody>'+(sumRows||'<tr><td colspan="8" class="muted">No activity in this period.</td></tr>')+sumTotals+'</tbody></table>'
+  +'<h2>Employee summary</h2><table><thead><tr><th>Employee</th><th>Team</th><th class="n">Worked</th><th class="n">PTO</th><th class="n">Sick</th><th class="n">Holiday</th><th class="n">Total</th><th>Notes</th></tr></thead><tbody>'+(sumRows||'<tr><td colspan="8" class="muted">No activity in this period.</td></tr>')+sumTotals+'</tbody></table>'
   +'<h2>Daily detail</h2>'+(detail||'<p class="muted">No activity in this period.</p>')
   +'<div class="sign"><div>Manager approval &nbsp;&nbsp;&nbsp;&nbsp; Date</div><div>Payroll / HR review &nbsp;&nbsp;&nbsp;&nbsp; Date</div></div>';
   openPrintDoc(R.title,R.label+' · '+scopeText(),body);
