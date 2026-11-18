@@ -633,7 +633,12 @@ function roleText(m){
   return 'Manager · '+(teamName(m.team_id)||'Team '+m.team_id);
 }
 function rAdmin(){
-  const tl=teams.map(t=>{const n=agents.filter(a=>a.team_id===t.id&&a.active).length;return '<div class="row-item"><div style="flex:1;font-weight:500">'+esc(t.name)+'</div><div style="font-size:12px;color:var(--muted)">'+n+' active</div></div>';}).join('')||'<p class="notice">No teams.</p>';
+  const tl=teams.map(t=>{
+    const all=agents.filter(a=>a.team_id===t.id),n=all.filter(a=>a.active).length;
+    const mg=managers.filter(m=>m.team_id===t.id).length;
+    const right=all.length===0?'<button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-delteam="'+t.id+'">Delete</button>':'<span style="font-size:11px;color:var(--muted)">has employees</span>';
+    return '<div class="row-item"><div style="flex:1"><div style="font-weight:500">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--muted)">'+n+' active'+(all.length>n?' · '+(all.length-n)+' inactive':'')+' · '+mg+' manager'+(mg===1?'':'s')+'</div></div>'+right+'</div>';
+  }).join('')||'<p class="notice">No teams.</p>';
   const mg=managers.map(m=>{
     const self=m.user_id&&session&&m.user_id===session.user.id;
     return '<div class="row-item"><div style="flex:1;min-width:0"><div style="font-weight:500;word-break:break-all">'+esc(m.email)+'</div><div style="font-size:11px;color:var(--muted)">'+esc(roleText(m))+(m.user_id?'':' · hasn\'t signed in yet')+'</div></div>'+(self?'':'<button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" data-rmmgr="'+m.id+'">Remove</button>')+'</div>';
@@ -812,6 +817,14 @@ appEl.addEventListener('click',async e=>{
     const m=managers.find(x=>x.id===Number(rmB.dataset.rmmgr));
     if(!confirm('Remove '+m.email+' ('+roleText(m)+')?'))return;
     await guard(async()=>{await must(sb.from('team_members').delete().eq('id',m.id));await loadMgrData();adminMsg='';});
+    render();return;
+  }
+  const dtmB=t.closest('[data-delteam]');
+  if(dtmB){
+    const tm=teams.find(x=>x.id===Number(dtmB.dataset.delteam));
+    const ms=managers.filter(m=>m.team_id===tm.id);
+    if(!confirm('Delete the team "'+tm.name+'"?'+(ms.length?'\n\nThe manager assignment'+(ms.length>1?'s':'')+' for '+ms.map(m=>m.email).join(', ')+' will be removed too.':'')+'\n\nThis cannot be undone.'))return;
+    await guard(async()=>{await must(sb.rpc('delete_team',{p_id:tm.id}));teams=(await must(sb.from('teams').select('*').order('name')))||[];if(teamFilter===tm.id)teamFilter='all';await loadMgrData();adminMsg='';});
     render();return;
   }
   const rhB=t.closest('[data-rmhol]');
